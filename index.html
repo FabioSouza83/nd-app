@@ -491,9 +491,13 @@ function renderHist(){
   var dispMai_d=Number(M.ant_d)+Number(M.rec_d)-Number(M.desp_d)-Number(M.plab_d)-Number(M.prov_d);
   var totRecMai=Number(M.rec_n)+Number(M.rec_d);
 
+  // Rótulo do mês em andamento derivado de mes_ref ('YYYY-MM'), sem new Date() (evita rollback de timezone)
+  var refAtual=(M.mes_ref||'').split('-');
+  var lblAtual=(refAtual.length===2&&MESES[parseInt(refAtual[1],10)-1])?MESES[parseInt(refAtual[1],10)-1]+' '+refAtual[0]:'';
+
   html+='<div class="h-row atual">'
     +'<div class="h-hdr" data-toggle="05">'
-    +'<div class="h-title">Mai 2026 <span class="chip chip-wip">⏳ em andamento</span></div>'
+    +'<div class="h-title">'+lblAtual+' <span class="chip chip-wip">⏳ em andamento</span></div>'
     +'<span style="font-size:18px;color:var(--gray)">'+(S.abre['05']?'▲':'▼')+'</span></div>'
     +'<div class="h-sum">'
     +'<span style="font-size:12px;color:var(--gray)">Receita: <strong style="color:var(--navy)">'+fmt(totRecMai)+'</strong></span>'
