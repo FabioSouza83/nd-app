@@ -1,0 +1,1160 @@
+﻿<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#1B2A4A">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="ND Financeiro">
+<title>ND Fisioterapia — Controle Financeiro</title>
+<link href="https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{--navy:#1B2A4A;--amber:#E8A020;--cream:#F5F3EE;--neia:#BDD7EE;--neia-d:#2E75B6;--dany:#C6E0B4;--dany-d:#375623;--red:#C0392B;--green:#1F5C1F;--white:#FFFFFF;--gray:#8B8B8B;--prov:#FCE4D6;--warn:#FFF3CD;--r:16px;--r2:10px}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+html,body{height:100%;background:#E8E5DE;font-family:'DM Sans',sans-serif}
+#app{height:100%}
+
+.ls{min-height:100vh;background:var(--navy);display:flex;flex-direction:column;align-items:center;justify-content:center;padding:32px 24px}
+.ll h1{font-family:'DM Serif Display',serif;color:var(--amber);font-size:30px;text-align:center}
+.ll p{color:rgba(255,255,255,.45);font-size:12px;margin-top:6px;letter-spacing:1.5px;text-transform:uppercase;text-align:center;margin-bottom:48px}
+.lc{background:white;border-radius:var(--r);padding:32px;width:100%;max-width:360px;box-shadow:0 8px 40px rgba(27,42,74,.18)}
+.lc h2{font-family:'DM Serif Display',serif;color:var(--navy);font-size:22px;margin-bottom:24px}
+.fg{margin-bottom:16px}
+.fg label{display:block;font-size:11px;font-weight:600;color:var(--navy);letter-spacing:.5px;text-transform:uppercase;margin-bottom:7px}
+.fg input,.fg select,.fg textarea{width:100%;padding:13px 15px;border:1.5px solid #E0DDD6;border-radius:var(--r2);font-family:'DM Sans',sans-serif;font-size:15px;color:var(--navy);background:var(--cream);outline:none}
+.fg input:focus,.fg select:focus,.fg textarea:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(232,160,32,.12)}
+.btn{display:block;width:100%;padding:15px;background:var(--amber);color:var(--navy);border:none;border-radius:var(--r2);font-family:'DM Sans',sans-serif;font-size:15px;font-weight:600;cursor:pointer;text-align:center}
+.btn:hover{filter:brightness(1.05)}
+.btn:disabled{opacity:.55;cursor:not-allowed}
+.btn-sec{background:transparent;color:var(--navy);border:1.5px solid #E0DDD6}
+.btn-sm{padding:9px 15px;font-size:13px;width:auto;display:inline-block}
+.err{background:#FEE;border-left:3px solid var(--red);padding:12px 16px;border-radius:8px;font-size:13px;color:var(--red);margin-bottom:16px}
+.loading{min-height:100vh;background:var(--navy);display:flex;flex-direction:column;align-items:center;justify-content:center;color:var(--amber)}
+.loading-dot{width:10px;height:10px;border-radius:50%;background:var(--amber);margin:0 4px;animation:bounce 1.4s infinite ease-in-out both;display:inline-block}
+.loading-dot:nth-child(1){animation-delay:-.32s}.loading-dot:nth-child(2){animation-delay:-.16s}
+@keyframes bounce{0%,80%,100%{transform:scale(0)}40%{transform:scale(1)}}
+
+.app{display:flex;flex-direction:column;height:100vh;max-width:540px;margin:0 auto;background:var(--cream);box-shadow:0 0 40px rgba(27,42,74,.12)}
+.hdr{background:var(--navy);padding:14px 18px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:100}
+.hdr h1{font-family:'DM Serif Display',serif;color:var(--amber);font-size:18px}
+.ubadge{background:rgba(255,255,255,.12);color:white;padding:6px 13px;border-radius:20px;font-size:12px;font-weight:500;display:flex;align-items:center;gap:6px}
+.udot{width:8px;height:8px;border-radius:50%}
+.content{flex:1;overflow-y:auto;padding:16px 14px 90px}
+.bnav{position:fixed;bottom:0;background:white;border-top:1px solid #E8E5DE;display:flex;padding:8px 0 20px;box-shadow:0 -4px 20px rgba(27,42,74,.08);z-index:100;width:100%;max-width:540px;left:50%;transform:translateX(-50%)}
+.ni{flex:1;display:flex;flex-direction:column;align-items:center;gap:3px;padding:7px 4px;cursor:pointer;color:var(--gray);font-size:10px;font-weight:500;border:none;background:none}
+.ni.active{color:var(--navy)}
+.ni-icon{font-size:20px;line-height:1}
+
+.card{background:white;border-radius:var(--r);padding:18px;box-shadow:0 2px 12px rgba(27,42,74,.08);margin-bottom:12px}
+.card-title{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1px;color:var(--gray);margin-bottom:10px}
+
+.meta{background:white;border-radius:var(--r);padding:14px 16px;margin-bottom:12px;box-shadow:0 2px 12px rgba(27,42,74,.08);border-left:3px solid var(--amber)}
+.meta-row{display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px}
+.meta-row:not(:last-child){border-bottom:1px solid #F0EDE8;padding-bottom:6px;margin-bottom:6px}
+.meta-icon{font-size:14px;width:20px;flex-shrink:0}
+.meta-l{color:var(--gray);font-weight:500;flex-shrink:0;min-width:110px;font-size:11px}
+.meta-v{color:var(--navy);font-weight:600;text-align:right;flex:1;font-size:11px}
+
+.hero{background:var(--navy);border-radius:var(--r);padding:20px;margin-bottom:12px;position:relative;overflow:hidden}
+.hero::before{content:'';position:absolute;top:-40px;right:-40px;width:160px;height:160px;border-radius:50%;background:rgba(232,160,32,.07)}
+.hero-label{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:1.5px;color:rgba(255,255,255,.5);margin-bottom:14px}
+.scards{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px}
+.sc{background:rgba(255,255,255,.08);border-radius:12px;padding:14px 12px;min-width:0}
+.sc.neia{border-top:2px solid var(--neia)}
+.sc.dany{border-top:2px solid var(--dany)}
+.sc-name{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
+.sc-name.neia{color:var(--neia)}
+.sc-name.dany{color:var(--dany)}
+.sc-line{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.sc-line-l{font-size:10px;color:rgba(255,255,255,.45)}
+.sc-line-v{font-size:10px;color:rgba(255,255,255,.7)}
+.sc-disp{display:flex;flex-direction:column;align-items:flex-start;padding-top:8px;margin-top:6px;border-top:2px solid rgba(255,255,255,.15)}
+.sc-disp-l{font-size:10px;font-weight:700;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
+.sc-disp-v{font-family:'DM Serif Display',serif;font-size:20px;font-weight:700;color:white;line-height:1}
+.sc-alert{font-size:10px;color:#FFB347;margin-top:4px}
+.hero-tl{font-size:11px;color:rgba(255,255,255,.5);margin-bottom:4px}
+.hero-tv{font-family:'DM Serif Display',serif;font-size:30px;color:var(--amber);line-height:1}
+
+.evo-wrap{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px}
+.evo-col{flex-shrink:0;text-align:center;width:60px}
+.evo-mes{font-size:9px;font-weight:600;text-transform:uppercase;color:var(--gray);margin-bottom:6px}
+.evo-bw{height:80px;display:flex;align-items:flex-end;justify-content:center;gap:3px}
+.evo-b{width:18px;border-radius:4px 4px 0 0;min-height:4px}
+.evo-b.rec{background:var(--neia)}
+.evo-b.res{background:var(--amber)}
+.evo-b.fut{background:#E0DDD6}
+.evo-v{font-size:9px;color:var(--navy);margin-top:4px;font-weight:600}
+
+.tx{background:white;border-radius:var(--r2);padding:13px 15px;box-shadow:0 2px 8px rgba(27,42,74,.06);display:flex;align-items:center;gap:11px;margin-bottom:8px}
+.tx-icon{width:38px;height:38px;border-radius:9px;display:flex;align-items:center;justify-content:center;font-size:17px;flex-shrink:0}
+.tx-icon.rec{background:rgba(198,224,180,.3)}
+.tx-icon.desp{background:rgba(254,215,215,.5)}
+.tx-icon.conj{background:rgba(255,236,153,.4)}
+.tx-info{flex:1;min-width:0}
+.tx-name{font-size:13px;font-weight:500;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tx-meta{font-size:11px;color:var(--gray);margin-top:1px}
+.tx-tag{display:inline-block;font-size:10px;font-weight:600;padding:2px 7px;border-radius:20px;margin-top:2px}
+.tag-n{background:var(--neia);color:var(--neia-d)}
+.tag-d{background:var(--dany);color:var(--dany-d)}
+.tag-c{background:#FFF3CD;color:#856404}
+.tx-amt{font-family:'DM Serif Display',serif;font-size:15px;white-space:nowrap}
+.tx-amt.pos{color:var(--green)}
+.tx-amt.neg{color:var(--red)}
+
+/* ── PACIENTES ── */
+.pac-h{display:flex;justify-content:space-between;align-items:center;margin-bottom:14px}
+.pac-h-l{display:flex;flex-direction:column}
+.pac-h-tt{font-family:'DM Serif Display',serif;font-size:22px;color:var(--navy);line-height:1.1}
+.pac-h-sub{font-size:11px;color:var(--gray);margin-top:2px}
+.pac-add{background:var(--amber);color:var(--navy);border:none;border-radius:var(--r2);font-weight:700;font-size:13px;padding:9px 14px;cursor:pointer;display:flex;align-items:center;gap:6px}
+.pac-filters{display:flex;gap:6px;margin-bottom:14px;overflow-x:auto;padding-bottom:4px}
+.pac-filters::-webkit-scrollbar{display:none}
+.pac-fbtn{background:white;border:1.5px solid #E0DDD6;color:var(--navy);border-radius:30px;padding:7px 13px;font-size:11px;font-weight:600;cursor:pointer;white-space:nowrap;flex-shrink:0}
+.pac-fbtn.on{background:var(--navy);color:white;border-color:var(--navy)}
+.pac-grp{margin-bottom:18px}
+.pac-grp-tt{font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.8px;margin:0 0 8px 4px;display:flex;align-items:center;gap:6px}
+.pac-grp-tt.neia::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--neia-d)}
+.pac-grp-tt.dany::before{content:'';width:8px;height:8px;border-radius:50%;background:var(--dany-d)}
+.pac{background:white;border-radius:var(--r2);padding:13px;margin-bottom:8px;display:flex;align-items:center;gap:11px;border-left:3px solid #E0DDD6;cursor:pointer}
+.pac.neia{border-left-color:var(--neia-d)}
+.pac.dany{border-left-color:var(--dany-d)}
+.pac-info{flex:1;min-width:0}
+.pac-nome{font-size:14px;font-weight:600;color:var(--navy);margin-bottom:3px}
+.pac-meta{font-size:11px;color:var(--gray);display:flex;gap:8px;flex-wrap:wrap}
+.pac-meta span{display:inline-flex;align-items:center;gap:3px}
+.pac-r{text-align:right}
+.pac-v{font-family:'DM Serif Display',serif;font-size:15px;color:var(--navy);font-weight:600;line-height:1}
+.pac-bd{font-size:10px;font-weight:700;padding:2px 7px;border-radius:30px;display:inline-block;margin-top:4px;letter-spacing:.3px}
+.bd-ativo{background:#E8F5E8;color:#1F5C1F}
+.bd-pausado{background:#FFF3CD;color:#856404}
+.bd-alta{background:#E8E5DE;color:#6B6B6B}
+.bd-avaliacao{background:var(--amber);color:var(--navy)}
+.pac-empty{background:white;border-radius:var(--r2);padding:32px 20px;text-align:center;color:var(--gray)}
+.pac-empty p{font-size:13px;margin-top:8px}
+.pac-vf{font-size:11px;color:var(--gray);text-align:center;background:#FFF8E1;padding:9px;border-radius:var(--r2);margin-bottom:14px;border:1px solid #F0E0B0}
+.pf-actions{display:flex;gap:8px;margin-top:18px}
+.pf-actions .btn{flex:1}
+.pf-status{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px}
+.pf-st{padding:11px 8px;border:1.5px solid #E0DDD6;border-radius:var(--r2);background:white;cursor:pointer;font-size:12px;font-weight:600;color:var(--navy);text-align:center}
+.pf-st.on{background:var(--navy);color:white;border-color:var(--navy)}
+.pf-st.on.ativo{background:#1F5C1F;border-color:#1F5C1F}
+.pf-st.on.alta{background:#6B6B6B;border-color:#6B6B6B}
+
+.h-row{background:white;border-radius:var(--r2);padding:14px 16px;margin-bottom:8px;box-shadow:0 2px 8px rgba(27,42,74,.06)}
+.h-row.atual{border-left:3px solid var(--amber)}
+.h-hdr{display:flex;align-items:center;justify-content:space-between;cursor:pointer}
+.h-title{font-size:13px;font-weight:600;color:var(--navy);display:flex;align-items:center;gap:8px}
+.chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600}
+.chip-ok{background:rgba(31,92,31,.1);color:var(--green)}
+.chip-wip{background:rgba(232,160,32,.15);color:#7D5A00}
+.h-sum{display:flex;justify-content:space-between;margin-top:6px}
+.h-det{margin-top:12px;border-top:1px solid #F0EDE8;padding-top:12px;display:none}
+.h-det.open{display:block}
+.h-line{display:flex;justify-content:space-between;align-items:center;padding:5px 0}
+.h-line:not(:last-child){border-bottom:1px solid #F8F6F2}
+.h-ll{font-size:12px;color:var(--gray);flex:1}
+.h-ln{font-size:12px;color:var(--neia-d);font-weight:500;min-width:80px;text-align:right}
+.h-ld{font-size:12px;color:var(--dany-d);font-weight:500;min-width:80px;text-align:right}
+
+.ftt{font-family:'DM Serif Display',serif;font-size:22px;color:var(--navy);margin-bottom:18px}
+.rg{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.rc{border:2px solid #E0DDD6;border-radius:var(--r2);padding:13px;cursor:pointer;text-align:center}
+.rc.sel{border-color:var(--amber);background:rgba(232,160,32,.06)}
+.rc-i{font-size:22px;margin-bottom:5px}
+.rc-l{font-size:12px;font-weight:600;color:var(--navy)}
+.fg3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}
+.fb{border:2px solid #E0DDD6;border-radius:var(--r2);padding:11px 6px;cursor:pointer;text-align:center;background:none;font-family:'DM Sans',sans-serif}
+.fb.sc{border-color:#856404;background:#FFF3CD}
+.fb.sn{border-color:var(--neia-d);background:var(--neia)}
+.fb.sd{border-color:var(--dany-d);background:var(--dany)}
+.fb span{display:block;font-size:11px;font-weight:600;color:var(--navy);margin-top:3px}
+.split{background:var(--cream);border-radius:var(--r2);padding:13px;margin-top:10px}
+.sr{display:flex;justify-content:space-between;padding:5px 0}
+.sr:not(:last-child){border-bottom:1px solid #E0DDD6}
+
+.aud{background:white;border-radius:var(--r2);padding:13px 15px;margin-bottom:8px;box-shadow:0 2px 8px rgba(27,42,74,.06)}
+.aud-h{display:flex;justify-content:space-between;margin-bottom:5px}
+.aud-u{font-size:11px;font-weight:600;color:var(--amber)}
+.aud-t{font-size:11px;color:var(--gray)}
+.aud-d{font-size:13px;color:var(--navy);font-weight:500}
+.aud-x{font-size:11px;color:var(--gray);margin-top:2px}
+
+.stt{font-family:'DM Serif Display',serif;font-size:20px;color:var(--navy);margin-bottom:12px}
+.ssub{font-size:12px;color:var(--gray);margin-top:-8px;margin-bottom:12px}
+.empty{text-align:center;padding:40px 20px;color:var(--gray)}
+.toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--navy);color:white;padding:13px 22px;border-radius:30px;font-size:13px;font-weight:500;z-index:9999}
+.toast.err{background:var(--red)}
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="loading">
+    <div>
+      <span class="loading-dot"></span>
+      <span class="loading-dot"></span>
+      <span class="loading-dot"></span>
+    </div>
+    <p style="margin-top:18px;font-size:13px;letter-spacing:1.5px;text-transform:uppercase">Carregando</p>
+  </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+<script>
+// ═══════════════════════════════════════════════════════════════
+// CONFIGURAÇÃO SUPABASE
+// ═══════════════════════════════════════════════════════════════
+var SUPA_URL = 'https://pizggnpvibwbocmxjvfa.supabase.co';
+var SUPA_KEY = 'sb_publishable_NeZdYyZGPMIKCerQ9w_CWw_IKXWmjmV';
+var sb = supabase.createClient(SUPA_URL, SUPA_KEY);
+
+// ═══════════════════════════════════════════════════════════════
+// PERFIS — mapeamento email -> nome amigável e papel
+// (mantém UX igual ao app antigo; identidade real vem do Auth)
+// ═══════════════════════════════════════════════════════════════
+var PERFIS = {
+  'edineiacss@outlook.com':    {name:'Dra. Néia',   role:'neia'},
+  'danyvichert@hotmail.com':   {name:'Dra. Dany',   role:'dany'},
+  'fhs_consultor@outlook.com': {name:'Fábio (FHS)', role:'fabio'}
+};
+
+var CATS = [
+  {id:'fixo',l:'Fixo',i:'🔒'},{id:'mkt',l:'Marketing',i:'📢'},{id:'equip',l:'Equipamento',i:'🩺'},
+  {id:'invest',l:'Investimento',i:'🏗️'},{id:'encargo',l:'Encargo',i:'📋'},{id:'outros',l:'Outros',i:'📦'}
+];
+var MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
+var RESERVA_MIN = 1000.00;
+
+// ═══════════════════════════════════════════════════════════════
+// ESTADO GLOBAL
+// ═══════════════════════════════════════════════════════════════
+var S = {
+  user: null,           // { email, name, role }
+  ready: false,         // true depois de carregar dados do Supabase
+  loading: true,        // splash inicial
+  tab: 'dashboard',
+  erro: null,
+  abre: {},
+  form: {tipo:'despesa', desc:'', valor:'', flag:'conjunta', cat:'fixo', venc:'', obs:''},
+  toast: null,
+  toastErr: false,
+  // Dados do Supabase
+  META: null,
+  MAIO: null,
+  HIST: [],
+  LANC: []
+};
+
+// ═══════════════════════════════════════════════════════════════
+// UTILITÁRIOS
+// ═══════════════════════════════════════════════════════════════
+function fmt(v){return 'R$\u00A0'+Math.abs(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2})}
+function fmtS(v){return v<0?'('+fmt(v)+')':fmt(v)}
+function fmtMesRef(ref){
+  // Converte '2026-06' para 'Junho 2026'
+  if(!ref) return '';
+  var nomes=['Janeiro','Fevereiro','Março','Abril','Maio','Junho','Julho','Agosto','Setembro','Outubro','Novembro','Dezembro'];
+  var partes=ref.split('-');
+  if(partes.length!==2) return ref;
+  var ano=partes[0];
+  var mes=parseInt(partes[1],10)-1;
+  if(mes<0||mes>11) return ref;
+  return nomes[mes]+' '+ano;
+}
+function today(){return new Date().toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'})}
+function nowStr(){return new Date().toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',hour:'2-digit',minute:'2-digit'})}
+
+function showToast(msg, isErr){
+  S.toast = msg;
+  S.toastErr = !!isErr;
+  render();
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CARREGAMENTO DE DADOS DO SUPABASE
+// ═══════════════════════════════════════════════════════════════
+async function carregarDados(){
+  try {
+    var [meta, saldos, hist, lanc, pac] = await Promise.all([
+      sb.from('nd_meta').select('*').eq('id',1).single(),
+      sb.from('nd_saldos_mes').select('*').eq('id',1).single(),
+      sb.from('nd_historico').select('*').order('ordem',{ascending:true}),
+      sb.from('nd_lancamentos').select('*').order('created_at',{ascending:true}),
+      sb.from('nd_pacientes').select('*').eq('excluido', false).order('nome',{ascending:true})
+    ]);
+
+    if(meta.error) throw new Error('meta: '+meta.error.message);
+    if(saldos.error) throw new Error('saldos: '+saldos.error.message);
+    if(hist.error) throw new Error('hist: '+hist.error.message);
+    if(lanc.error) throw new Error('lanc: '+lanc.error.message);
+    if(pac.error) throw new Error('pacientes: '+pac.error.message);
+
+    S.META = meta.data;
+    S.MAIO = saldos.data;
+    S.HIST = hist.data;
+    S.LANC = lanc.data;
+    S.PACIENTES = pac.data || [];
+    S.ready = true;
+    return true;
+  } catch(e){
+    console.error('Erro ao carregar dados:', e);
+    showToast('Erro ao carregar dados. Tente novamente.', true);
+    return false;
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CÁLCULOS (usam S.MAIO e S.LANC)
+// ═══════════════════════════════════════════════════════════════
+function calcDisp(){
+  var rn=0,rd=0,dn=0,dd=0;
+  for(var i=0;i<S.LANC.length;i++){
+    var t=S.LANC[i];
+    // Lançamentos do extrato já estão computados em rec_n/d e desp_n/d via nd_saldos_mes
+    // Só somamos os lançamentos manuais (origem='manual') para evitar dupla contagem
+    if(t.origem==='extrato') continue;
+    if(t.tipo==='receita'){
+      if(t.flag==='neia') rn+=Number(t.valor);
+      else rd+=Number(t.valor);
+    } else {
+      if(t.flag==='conjunta'){dn+=Number(t.valor)/2;dd+=Number(t.valor)/2;}
+      else if(t.flag==='neia') dn+=Number(t.valor);
+      else dd+=Number(t.valor);
+    }
+  }
+  var M=S.MAIO;
+  return {
+    neia: Number(M.ant_n)+Number(M.rec_n)+rn-Number(M.desp_n)-dn-Number(M.plab_n)-Number(M.prov_n),
+    dany: Number(M.ant_d)+Number(M.rec_d)+rd-Number(M.desp_d)-dd-Number(M.plab_d)-Number(M.prov_d)
+  };
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RENDER
+// ═══════════════════════════════════════════════════════════════
+function render(){
+  var root=document.getElementById('app');
+
+  if(S.loading){
+    root.innerHTML = '<div class="loading"><div>'
+      +'<span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span>'
+      +'</div><p style="margin-top:18px;font-size:13px;letter-spacing:1.5px;text-transform:uppercase">Carregando</p></div>';
+    return;
+  }
+
+  if(!S.user){
+    root.innerHTML=renderLogin();
+    bindLogin();
+  } else if(!S.ready){
+    root.innerHTML = '<div class="loading"><div>'
+      +'<span class="loading-dot"></span><span class="loading-dot"></span><span class="loading-dot"></span>'
+      +'</div><p style="margin-top:18px;font-size:13px;letter-spacing:1.5px;text-transform:uppercase">Atualizando dados</p></div>';
+  } else {
+    root.innerHTML=renderApp();
+    bindApp();
+  }
+
+  if(S.toast){
+    setTimeout(function(){S.toast=null;S.toastErr=false;render();},2800);
+  }
+}
+
+function renderLogin(){
+  return '<div class="ls">'
+    +'<div class="ll"><h1>ND Fisioterapia</h1><p>Controle Financeiro</p></div>'
+    +'<div class="lc"><h2>Entrar</h2>'
+    +(S.erro?'<div class="err">'+S.erro+'</div>':'')
+    +'<div class="fg"><label>E-mail</label><input type="email" id="iem" placeholder="seu@email.com" autocomplete="email"></div>'
+    +'<div class="fg"><label>Senha</label><input type="password" id="ipw" placeholder="••••••"></div>'
+    +'<button class="btn" id="btn-entrar">Entrar</button></div>'
+    +'<p style="color:rgba(255,255,255,.25);font-size:11px;margin-top:20px">FHS Consultoria · CNPJ 59.838.716/0001-05</p>'
+    +'</div>';
+}
+
+function renderApp(){
+  var u=S.user;
+  var dotColor=u.role==='neia'?'background:var(--neia)':u.role==='dany'?'background:var(--dany)':'background:var(--amber)';
+  var tabs=[
+    {id:'dashboard',icon:'📊',label:'Painel'},
+    {id:'historico',icon:'📅',label:'Histórico'},
+    {id:'pacientes',icon:'👥',label:'Pacientes'},
+    {id:'lancamento',icon:'➕',label:'Lançar'},
+    {id:'auditoria',icon:'🔍',label:'Trilha'}
+  ];
+
+  var content='';
+  if(S.tab==='dashboard')content=renderDash();
+  else if(S.tab==='historico')content=renderHist();
+  else if(S.tab==='pacientes'){
+    content = (S.view==='pacForm') ? renderFormPaciente() : renderPacientes();
+  }
+  else if(S.tab==='lancamento')content=renderForm();
+  else if(S.tab==='auditoria')content=renderAudit();
+
+  var tabsHtml='';
+  for(var i=0;i<tabs.length;i++){
+    var t=tabs[i];
+    tabsHtml+='<button class="ni'+(S.tab===t.id?' active':'')+'" data-tab="'+t.id+'"><span class="ni-icon">'+t.icon+'</span>'+t.label+'</button>';
+  }
+
+  var html='<div class="app">'
+    +'<header class="hdr"><h1>ND Fisioterapia</h1>'
+    +'<div class="ubadge"><span class="udot" style="'+dotColor+'"></span>'+u.name+'</div></header>'
+    +'<main class="content">'+content+'</main>'
+    +'<nav class="bnav">'+tabsHtml+'</nav>'
+    +'</div>';
+  if(S.toast)html+='<div class="toast'+(S.toastErr?' err':'')+'">'+S.toast+'</div>';
+  return html;
+}
+
+function renderDash(){
+  var d=calcDisp();
+  var M=S.MAIO;
+
+  var sCard=function(name,cls,ant,rec,desp,plab,prov,disp_val){
+    var isLow=disp_val<=0;
+    var dispTxt=isLow?'R$\u00A00,00':fmt(disp_val);
+    var alertTxt=isLow?'<div class="sc-alert">Aguardando próximas receitas</div>':'';
+    var plabLine=plab>0?'<div class="sc-line"><span class="sc-line-l">(–) Pró-labore</span><span class="sc-line-v">('+fmt(plab)+')</span></div>':'';
+    return '<div class="sc '+cls+'">'
+      +'<div class="sc-name '+cls+'">'+name+'</div>'
+      +'<div class="sc-line"><span class="sc-line-l">Saldo anterior</span><span class="sc-line-v">'+fmt(ant)+'</span></div>'
+      +'<div class="sc-line"><span class="sc-line-l">+ Receitas mês</span><span class="sc-line-v">'+fmt(rec)+'</span></div>'
+      +'<div class="sc-line"><span class="sc-line-l">(–) Despesas operac.</span><span class="sc-line-v">('+fmt(desp)+')</span></div>'
+      +plabLine
+      +'<div class="sc-line"><span class="sc-line-l">(–) Provisão</span><span class="sc-line-v">('+fmt(prov)+')</span></div>'
+      +'<div class="sc-disp"><span class="sc-disp-l">Disponível agora</span><span class="sc-disp-v">'+dispTxt+'</span></div>'
+      +alertTxt+'</div>';
+  };
+
+  var maxRec=15000;
+  for(var i=0;i<S.HIST.length;i++){var r=Number(S.HIST[i].rec_n)+Number(S.HIST[i].rec_d);if(r>maxRec)maxRec=r;}
+
+  var barras='';
+  for(var j=0;j<S.HIST.length;j++){
+    var m=S.HIST[j];
+    var totRec=Number(m.rec_n)+Number(m.rec_d);
+    var totRes=Math.max(0,Number(m.res_n)+Number(m.res_d));
+    var h=Math.round((totRec/maxRec)*70);
+    var hr=Math.round((totRes/maxRec)*70);
+    barras+='<div class="evo-col"><div class="evo-mes">'+MESES[j]+'</div>'
+      +'<div class="evo-bw"><div class="evo-b rec" style="height:'+h+'px"></div><div class="evo-b res" style="height:'+Math.max(4,hr)+'px"></div></div>'
+      +'<div class="evo-v">'+(totRec/1000).toFixed(1)+'k</div></div>';
+  }
+  for(var k=S.HIST.length;k<12;k++){
+    barras+='<div class="evo-col"><div class="evo-mes">'+MESES[k]+'</div>'
+      +'<div class="evo-bw"><div class="evo-b fut" style="height:40px"></div></div>'
+      +'<div class="evo-v" style="color:#ccc">—</div></div>';
+  }
+
+  var ultimos=S.LANC.slice(-8).reverse();
+  var txHtml='';
+  if(ultimos.length===0){
+    txHtml='<div class="empty"><div style="font-size:36px;opacity:.3;margin-bottom:10px">📭</div><p>Nenhum lançamento ainda</p></div>';
+  }else{
+    for(var x=0;x<ultimos.length;x++)txHtml+=renderTx(ultimos[x]);
+  }
+
+  var totalDisp=Math.max(0,d.neia)+Math.max(0,d.dany);
+
+  return '<div class="meta">'
+    +'<div class="meta-row"><span class="meta-icon">🔄</span><span class="meta-l">Atualizado em</span><span class="meta-v">'+S.META.ultima+'</span></div>'
+    +'<div class="meta-row"><span class="meta-icon">📋</span><span class="meta-l">Base</span><span class="meta-v">'+S.META.base+'</span></div>'
+    +'<div class="meta-row"><span class="meta-icon">📅</span><span class="meta-l">Próxima atualização</span><span class="meta-v">'+S.META.proxima+'</span></div>'
+    +'</div>'
+    +'<div class="hero">'
+    +'<div class="hero-label">Disponível para retirada — '+fmtMesRef(S.MAIO.mes_ref)+'</div>'
+    +'<div class="scards">'
+    +sCard('Néia','neia',Number(M.ant_n),Number(M.rec_n),Number(M.desp_n),Number(M.plab_n),Number(M.prov_n),d.neia)
+    +sCard('Dany','dany',Number(M.ant_d),Number(M.rec_d),Number(M.desp_d),Number(M.plab_d),Number(M.prov_d),d.dany)
+    +'</div>'
+    +'<div class="hero-tl">Total disponível</div>'
+    +'<div class="hero-tv">'+fmt(totalDisp)+'</div>'
+    +'</div>'
+    +'<div class="card"><div class="card-title">Evolução 2026</div>'
+    +'<div class="evo-wrap">'+barras+'</div>'
+    +'<div style="display:flex;gap:12px;margin-top:10px;justify-content:center">'
+    +'<span style="font-size:11px;color:var(--gray)"><span style="display:inline-block;width:10px;height:10px;background:var(--neia);border-radius:2px;margin-right:4px"></span>Receita</span>'
+    +'<span style="font-size:11px;color:var(--gray)"><span style="display:inline-block;width:10px;height:10px;background:var(--amber);border-radius:2px;margin-right:4px"></span>Resultado</span>'
+    +'<span style="font-size:11px;color:var(--gray)"><span style="display:inline-block;width:10px;height:10px;background:#E0DDD6;border-radius:2px;margin-right:4px"></span>Futuro</span>'
+    +'</div></div>'
+    +'<p class="stt">Últimos Lançamentos</p>'
+    +txHtml
+    +'<div style="text-align:center;margin-top:20px"><button class="btn btn-sec btn-sm" id="btn-sair">Sair</button></div>';
+}
+
+function renderHist(){
+  var M=S.MAIO;
+  var html='<p class="stt">Histórico Mensal</p><p class="ssub">Toque em um mês para ver os detalhes</p>';
+
+  var dispMai_n=Number(M.ant_n)+Number(M.rec_n)-Number(M.desp_n)-Number(M.plab_n)-Number(M.prov_n);
+  var dispMai_d=Number(M.ant_d)+Number(M.rec_d)-Number(M.desp_d)-Number(M.plab_d)-Number(M.prov_d);
+  var totRecMai=Number(M.rec_n)+Number(M.rec_d);
+
+  html+='<div class="h-row atual">'
+    +'<div class="h-hdr" data-toggle="05">'
+    +'<div class="h-title">Mai 2026 <span class="chip chip-wip">⏳ em andamento</span></div>'
+    +'<span style="font-size:18px;color:var(--gray)">'+(S.abre['05']?'▲':'▼')+'</span></div>'
+    +'<div class="h-sum">'
+    +'<span style="font-size:12px;color:var(--gray)">Receita: <strong style="color:var(--navy)">'+fmt(totRecMai)+'</strong></span>'
+    +'<span style="font-size:12px;color:var(--gray)">Extrato: <strong style="color:var(--navy)">'+fmt(Number(M.extrato))+'</strong></span></div>'
+    +'<div class="h-det'+(S.abre['05']?' open':'')+'">'
+    +'<div style="display:flex;justify-content:flex-end;gap:16px;margin-bottom:6px">'
+    +'<span style="font-size:10px;font-weight:700;color:var(--neia-d)">NÉIA</span>'
+    +'<span style="font-size:10px;font-weight:700;color:var(--dany-d)">DANY</span></div>'
+    +renderLinhas(Number(M.rec_n),Number(M.rec_d),Number(M.desp_n),Number(M.desp_d),Number(M.plab_n),Number(M.plab_d),Number(M.prov_n),Number(M.prov_d),dispMai_n,dispMai_d,true)
+    +'<div style="margin-top:10px;background:rgba(255,243,205,.7);border-radius:8px;padding:10px;font-size:11px;color:#856404">'
+    +'ℹ️ Obrigações da empresa (DAS, INSS, Contabilidade) saem do caixa da empresa, não do saldo individual.'
+    +'</div></div></div>';
+
+  for(var i=S.HIST.length-1;i>=0;i--){
+    var m=S.HIST[i];
+    var totRec=Number(m.rec_n)+Number(m.rec_d);
+    var opN=Number(m.rec_n)-Number(m.desp_n)-Number(m.prov_n);
+    var opD=Number(m.rec_d)-Number(m.desp_d)-Number(m.prov_d);
+    var totOp=opN+opD;
+    var isOpen=S.abre[m.mes_key];
+
+    html+='<div class="h-row">'
+      +'<div class="h-hdr" data-toggle="'+m.mes_key+'">'
+      +'<div class="h-title">'+m.nome+' <span class="chip chip-ok">✅ fechado</span></div>'
+      +'<span style="font-size:18px;color:var(--gray)">'+(isOpen?'▲':'▼')+'</span></div>'
+      +'<div class="h-sum">'
+      +'<span style="font-size:12px;color:var(--gray)">Receita: <strong style="color:var(--navy)">'+fmt(totRec)+'</strong></span>'
+      +'<span style="font-size:12px;color:var(--green);font-weight:600">Op: '+fmt(totOp)+'</span></div>'
+      +'<div class="h-det'+(isOpen?' open':'')+'">'
+      +'<div style="display:flex;justify-content:flex-end;gap:16px;margin-bottom:6px">'
+      +'<span style="font-size:10px;font-weight:700;color:var(--neia-d)">NÉIA</span>'
+      +'<span style="font-size:10px;font-weight:700;color:var(--dany-d)">DANY</span></div>'
+      +renderLinhas(Number(m.rec_n),Number(m.rec_d),Number(m.desp_n),Number(m.desp_d),Number(m.plab_n),Number(m.plab_d),Number(m.prov_n),Number(m.prov_d),Number(m.res_n),Number(m.res_d),true)
+      +'</div></div>';
+  }
+  return html;
+}
+
+function renderLinhas(rn,rd,dn,dd,pn,pd,vn,vd,resN,resD,hasPlab){
+  var html=''
+    +'<div class="h-line"><span class="h-ll">💰 Receita bruta</span><span class="h-ln">'+fmtS(rn)+'</span><span class="h-ld">'+fmtS(rd)+'</span></div>'
+    +'<div class="h-line"><span class="h-ll">💸 Despesas operac.</span><span class="h-ln">'+fmtS(-dn)+'</span><span class="h-ld">'+fmtS(-dd)+'</span></div>'
+    +'<div class="h-line"><span class="h-ll">📋 Provisão encargos</span><span class="h-ln">'+fmtS(-vn)+'</span><span class="h-ld">'+fmtS(-vd)+'</span></div>';
+  var opN=rn-dn-vn;
+  var opD=rd-dd-vd;
+  html+='<div style="background:rgba(31,92,31,.06);padding:7px 10px;border-radius:8px;display:flex;justify-content:space-between;margin-top:8px">'
+    +'<span style="font-size:12px;font-weight:700;color:var(--green)">✅ Resultado operacional</span>'
+    +'<span style="font-size:12px;font-weight:700;color:var(--green)">'+fmt(opN+opD)+'</span></div>';
+  if(hasPlab&&(pn>0||pd>0)){
+    html+='<div style="border-top:1px dashed #DDD;padding-top:8px;margin-top:8px">'
+      +'<div class="h-line"><span class="h-ll" style="color:var(--red)">👤 Pró-labore</span><span class="h-ln">'+fmtS(-pn)+'</span><span class="h-ld">'+fmtS(-pd)+'</span></div>';
+    var transColor=(resN+resD)>=0?'var(--green)':'var(--red)';
+    html+='<div style="display:flex;justify-content:space-between;align-items:center;background:#F8F6F2;padding:7px 10px;border-radius:8px;margin-top:6px">'
+      +'<span style="font-size:11px;font-weight:600;color:var(--navy)">Saldo transportado</span>'
+      +'<span style="font-family:\'DM Serif Display\',serif;font-size:15px;color:'+transColor+'">'+fmtS(resN+resD)+'</span></div>'
+      +'<div style="display:flex;justify-content:space-between;margin-top:4px">'
+      +'<span style="font-size:10px;color:var(--neia-d)">Néia: '+fmtS(resN)+'</span>'
+      +'<span style="font-size:10px;color:var(--dany-d)">Dany: '+fmtS(resD)+'</span></div>'
+      +'</div>';
+  }
+  return html;
+}
+
+function renderForm(){
+  var f=S.form;
+  var sp=f.valor&&f.flag==='conjunta'?parseFloat(f.valor)/2:null;
+  var flagsHtml='';
+  if(f.tipo==='despesa'){
+    flagsHtml='<button class="fb'+(f.flag==='conjunta'?' sc':'')+'" data-flag="conjunta">🤝<span>Conjunta</span></button>'
+      +'<button class="fb'+(f.flag==='neia'?' sn':'')+'" data-flag="neia">👩‍⚕️<span>Néia</span></button>'
+      +'<button class="fb'+(f.flag==='dany'?' sd':'')+'" data-flag="dany">👩‍⚕️<span>Dany</span></button>';
+  }else{
+    flagsHtml='<button class="fb'+(f.flag==='neia'?' sn':'')+'" data-flag="neia">👩‍⚕️<span>Néia</span></button>'
+      +'<button class="fb'+(f.flag==='dany'?' sd':'')+'" data-flag="dany">👩‍⚕️<span>Dany</span></button>'
+      +'<button class="fb'+(f.flag==='conjunta'?' sc':'')+'" data-flag="conjunta">🤝<span>Ambas</span></button>';
+  }
+  var catsHtml='';
+  for(var i=0;i<CATS.length;i++){
+    catsHtml+='<option value="'+CATS[i].id+'"'+(f.cat===CATS[i].id?' selected':'')+'>'+CATS[i].i+' '+CATS[i].l+'</option>';
+  }
+  var html='<p class="ftt">Novo Lançamento</p>'
+    +'<div class="fg"><label>Tipo</label><div class="rg">'
+    +'<div class="rc'+(f.tipo==='despesa'?' sel':'')+'" data-tipo="despesa"><div class="rc-i">💸</div><div class="rc-l">Despesa</div></div>'
+    +'<div class="rc'+(f.tipo==='receita'?' sel':'')+'" data-tipo="receita"><div class="rc-i">💰</div><div class="rc-l">Receita</div></div>'
+    +'</div></div>'
+    +'<div class="fg"><label>'+(f.tipo==='despesa'?'Responsabilidade':'Doutora')+'</label><div class="fg3">'+flagsHtml+'</div></div>';
+  if(f.tipo==='despesa'){
+    html+='<div class="fg"><label>Categoria</label><select id="f-cat">'+catsHtml+'</select></div>'
+      +'<div class="fg"><label>Data de Vencimento</label><input type="date" id="f-venc" value="'+f.venc+'"></div>';
+  }
+  html+='<div class="fg"><label>Descrição</label><input type="text" id="f-desc" placeholder="'+(f.tipo==='despesa'?'Ex: Material de limpeza':'Ex: Nome do paciente')+'" value="'+escapeHtml(f.desc)+'"></div>'
+    +'<div class="fg"><label>Valor (R$)</label><input type="number" id="f-val" placeholder="0,00" value="'+f.valor+'" step="0.01" min="0"></div>';
+  if(sp){
+    html+='<div class="split"><p style="font-size:11px;font-weight:600;color:#856404;margin-bottom:8px">✂️ Divisão 50/50</p>'
+      +'<div class="sr"><span style="font-size:12px">Néia</span><span style="font-size:12px;font-weight:600">'+fmt(sp)+'</span></div>'
+      +'<div class="sr"><span style="font-size:12px">Dany</span><span style="font-size:12px;font-weight:600">'+fmt(sp)+'</span></div>'
+      +'</div>';
+  }
+  html+='<div class="fg" style="margin-top:14px"><label>Observação (opcional)</label><textarea id="f-obs" rows="2" style="resize:none">'+escapeHtml(f.obs)+'</textarea></div>'
+    +'<button class="btn" id="btn-salvar" style="margin-top:8px">💾 Salvar Lançamento</button>';
+  return html;
+}
+
+// ═══════════════════════════════════════════════════════════════
+// PACIENTES — Onda 1
+// ═══════════════════════════════════════════════════════════════
+function podeEditarPaciente(p){
+  // Todos os usuários autenticados (Fábio, Néia, Dany) podem editar qualquer paciente.
+  // Decisão de gestão: Fábio monitora de perto neste primeiro momento; restrições virão depois se necessário.
+  return true;
+}
+
+function statusLabel(s){
+  if(s==='ativo') return 'Ativo';
+  if(s==='pausado') return 'Pausado';
+  if(s==='alta') return 'Alta';
+  if(s==='avaliacao') return 'A validar';
+  return s;
+}
+
+function freqLabel(f){
+  var map={
+    '1x_semana':'1x/semana',
+    '2x_semana':'2x/semana',
+    '3x_semana':'3x/semana',
+    '1x_quinzena':'Quinzenal',
+    'variavel':'Variável',
+    'outra':'Outra'
+  };
+  return map[f]||f;
+}
+
+function renderPacientes(){
+  var filtro = S.pacFiltro || 'todos';
+  var lista = S.PACIENTES.slice();
+
+  // Filtra por status
+  if(filtro==='ativos') lista = lista.filter(function(p){return p.status==='ativo'});
+  else if(filtro==='avaliar') lista = lista.filter(function(p){return p.status==='avaliacao'});
+  else if(filtro==='pausados') lista = lista.filter(function(p){return p.status==='pausado'});
+  else if(filtro==='alta') lista = lista.filter(function(p){return p.status==='alta'});
+
+  // Conta pacientes a validar (para badge no botão)
+  var nAval=0;
+  for(var k=0;k<S.PACIENTES.length;k++) if(S.PACIENTES[k].status==='avaliacao') nAval++;
+
+  // Agrupa por Dra.
+  var neia=[], dany=[];
+  for(var i=0;i<lista.length;i++){
+    if(lista[i].doutora==='neia') neia.push(lista[i]);
+    else dany.push(lista[i]);
+  }
+
+  var html = ''
+    +'<div class="pac-h">'
+    +'<div class="pac-h-l">'
+    +'<div class="pac-h-tt">Pacientes</div>'
+    +'<div class="pac-h-sub">'+S.PACIENTES.length+' cadastrado'+(S.PACIENTES.length===1?'':'s')+'</div>'
+    +'</div>'
+    +'<button class="pac-add" id="btn-pac-novo">+ Novo</button>'
+    +'</div>';
+
+  // Aviso de pacientes a validar (se houver)
+  if(nAval>0 && filtro==='todos'){
+    html += '<div class="pac-vf">⚠️ '+nAval+' paciente'+(nAval>1?'s':'')+' aguardando validação dos dados.</div>';
+  }
+
+  // Filtros
+  html += '<div class="pac-filters">'
+    +'<button class="pac-fbtn'+(filtro==='todos'?' on':'')+'" data-fp="todos">Todos ('+S.PACIENTES.length+')</button>'
+    +'<button class="pac-fbtn'+(filtro==='ativos'?' on':'')+'" data-fp="ativos">🟢 Ativos</button>'
+    +(nAval>0?'<button class="pac-fbtn'+(filtro==='avaliar'?' on':'')+'" data-fp="avaliar">⚠️ A validar ('+nAval+')</button>':'')
+    +'<button class="pac-fbtn'+(filtro==='pausados'?' on':'')+'" data-fp="pausados">🟡 Pausados</button>'
+    +'<button class="pac-fbtn'+(filtro==='alta'?' on':'')+'" data-fp="alta">⚫ Alta</button>'
+    +'</div>';
+
+  if(lista.length===0){
+    html += '<div class="pac-empty"><div style="font-size:36px;opacity:.3">👥</div><p>Nenhum paciente encontrado neste filtro.</p></div>';
+  } else {
+    if(neia.length>0){
+      html += '<div class="pac-grp"><p class="pac-grp-tt neia">Dra. Néia ('+neia.length+')</p>';
+      for(var n=0;n<neia.length;n++) html += renderPacienteCard(neia[n]);
+      html += '</div>';
+    }
+    if(dany.length>0){
+      html += '<div class="pac-grp"><p class="pac-grp-tt dany">Dra. Dany ('+dany.length+')</p>';
+      for(var d=0;d<dany.length;d++) html += renderPacienteCard(dany[d]);
+      html += '</div>';
+    }
+  }
+
+  return html;
+}
+
+function renderPacienteCard(p){
+  var valorTxt = p.valor_padrao ? fmt(Number(p.valor_padrao)) : '—';
+  var freqTxt = freqLabel(p.frequencia);
+  if(p.frequencia==='outra' && p.frequencia_obs) freqTxt = p.frequencia_obs;
+  var badge = 'bd-'+p.status;
+  // Pagador (quando paciente é dependente — criança)
+  var pagadorTxt = '';
+  if(p.pagador_1){
+    pagadorTxt = '<div style="font-size:11px;color:var(--gray);margin-top:2px;margin-bottom:3px;font-style:italic">💳 Pagador: '+escapeHtml(p.pagador_1)+(p.pagador_2?' / '+escapeHtml(p.pagador_2):'')+'</div>';
+  }
+  return '<div class="pac '+p.doutora+'" data-pac="'+p.id+'">'
+    +'<div class="pac-info">'
+    +'<div class="pac-nome">'+escapeHtml(p.nome)+'</div>'
+    +pagadorTxt
+    +'<div class="pac-meta">'
+    +'<span>💰 '+valorTxt+'</span>'
+    +'<span>🔄 '+escapeHtml(freqTxt)+'</span>'
+    +'</div>'
+    +'</div>'
+    +'<div class="pac-r"><span class="pac-bd '+badge+'">'+statusLabel(p.status)+'</span></div>'
+    +'</div>';
+}
+
+function renderFormPaciente(){
+  var f = S.pacForm || {};
+  var editing = !!f.id;
+  var title = editing ? 'Editar paciente' : 'Novo paciente';
+  var doutora = f.doutora || (S.user.role==='dany' ? 'dany' : (S.user.role==='neia' ? 'neia' : 'neia'));
+  var status = f.status || 'ativo';
+  var freq = f.frequencia || '1x_semana';
+
+  // Permissões: se Dra. está editando paciente da outra Dra., bloqueia
+  if(editing && !podeEditarPaciente(f)){
+    return '<p class="stt">Acesso negado</p>'
+      +'<div class="pac-empty"><p>Você só pode editar pacientes da sua doutora.</p></div>'
+      +'<div style="text-align:center;margin-top:14px"><button class="btn btn-sec btn-sm" id="btn-pac-voltar">Voltar</button></div>';
+  }
+
+  var html = '<p class="stt">'+title+'</p>';
+
+  // Doutora — liberado para todos editarem (alteração cruzada permitida)
+  html += '<div class="fg"><label>Doutora responsável</label>'
+    +'<select id="pf-doutora">'
+    +'<option value="neia"'+(doutora==='neia'?' selected':'')+'>Dra. Néia</option>'
+    +'<option value="dany"'+(doutora==='dany'?' selected':'')+'>Dra. Dany</option>'
+    +'</select>'
+    +'</div>';
+
+  html += '<div class="fg"><label>Nome do paciente *</label>'
+    +'<input type="text" id="pf-nome" value="'+escapeHtml(f.nome||'')+'" placeholder="Nome completo"></div>';
+
+  // Pagadores — usados quando paciente é criança/dependente
+  // Quando vazios: paciente é o próprio pagador
+  html += '<div class="fg"><label>Pagador 1 <span style="font-weight:400;color:var(--gray);text-transform:none;letter-spacing:0">(se diferente do paciente)</span></label>'
+    +'<input type="text" id="pf-pag1" value="'+escapeHtml(f.pagador_1||'')+'" placeholder="Ex: pai, mãe ou responsável"></div>';
+
+  html += '<div class="fg"><label>Pagador 2 <span style="font-weight:400;color:var(--gray);text-transform:none;letter-spacing:0">(opcional)</span></label>'
+    +'<input type="text" id="pf-pag2" value="'+escapeHtml(f.pagador_2||'')+'" placeholder="Ex: segundo responsável"></div>';
+
+  html += '<div class="fg"><label>Valor padrão da sessão</label>'
+    +'<input type="number" id="pf-valor" value="'+(f.valor_padrao||'')+'" step="0.01" min="0" placeholder="160.00"></div>';
+
+  html += '<div class="fg"><label>Frequência</label>'
+    +'<select id="pf-freq">'
+    +'<option value="1x_semana"'+(freq==='1x_semana'?' selected':'')+'>1x por semana</option>'
+    +'<option value="2x_semana"'+(freq==='2x_semana'?' selected':'')+'>2x por semana</option>'
+    +'<option value="3x_semana"'+(freq==='3x_semana'?' selected':'')+'>3x por semana</option>'
+    +'<option value="1x_quinzena"'+(freq==='1x_quinzena'?' selected':'')+'>Quinzenal</option>'
+    +'<option value="variavel"'+(freq==='variavel'?' selected':'')+'>Variável</option>'
+    +'<option value="outra"'+(freq==='outra'?' selected':'')+'>Outra (especificar)</option>'
+    +'</select></div>';
+
+  // Campo livre só se "outra"
+  html += '<div class="fg" id="pf-freq-obs-wrap" style="'+(freq==='outra'?'':'display:none')+'">'
+    +'<label>Especificar frequência</label>'
+    +'<input type="text" id="pf-freq-obs" value="'+escapeHtml(f.frequencia_obs||'')+'" placeholder="Ex: 4x na primeira semana"></div>';
+
+  html += '<div class="fg"><label>Status</label>'
+    +'<div class="pf-status">'
+    +'<button type="button" class="pf-st'+(status==='ativo'?' on ativo':'')+'" data-st="ativo">🟢 Ativo</button>'
+    +'<button type="button" class="pf-st'+(status==='pausado'?' on':'')+'" data-st="pausado">🟡 Pausado</button>'
+    +'<button type="button" class="pf-st'+(status==='alta'?' on alta':'')+'" data-st="alta">⚫ Alta</button>'
+    +'<button type="button" class="pf-st'+(status==='avaliacao'?' on':'')+'" data-st="avaliacao">⚠️ A validar</button>'
+    +'</div></div>';
+
+  html += '<div class="fg"><label>Telefone (opcional)</label>'
+    +'<input type="tel" id="pf-tel" value="'+escapeHtml(f.telefone||'')+'" placeholder="(19) 9 9999-9999"></div>';
+
+  html += '<div class="fg"><label>Data de nascimento (opcional)</label>'
+    +'<input type="date" id="pf-nasc" value="'+(f.data_nascimento||'')+'"></div>';
+
+  html += '<div class="fg"><label>Observação (opcional)</label>'
+    +'<textarea id="pf-obs" rows="2" placeholder="Anotação geral">'+escapeHtml(f.observacao||'')+'</textarea></div>';
+
+  html += '<div class="pf-actions">'
+    +'<button class="btn btn-sec" id="btn-pf-cancelar">Cancelar</button>'
+    +'<button class="btn" id="btn-pf-salvar">'+(editing?'Salvar':'Cadastrar')+'</button>'
+    +'</div>';
+
+  if(editing){
+    html += '<div style="margin-top:14px;text-align:center">'
+      +'<button class="btn btn-sm" style="background:transparent;color:var(--red);border:1.5px solid var(--red);max-width:200px;margin:0 auto" id="btn-pf-excluir">🗑️ Remover paciente</button>'
+      +'<p style="font-size:10px;color:var(--gray);margin-top:6px;font-style:italic">Pode ser recuperado pelo Fábio se for engano</p>'
+      +'</div>';
+  }
+
+  return html;
+}
+
+async function salvarPaciente(){
+  var f = S.pacForm || {};
+  var nome = (document.getElementById('pf-nome').value||'').trim();
+  if(!nome){ showToast('Informe o nome do paciente.', true); return; }
+
+  var doutora = document.getElementById('pf-doutora').value;
+
+  var valor = parseFloat(document.getElementById('pf-valor').value)||null;
+  var freq = document.getElementById('pf-freq').value;
+  var freqObs = freq==='outra' ? (document.getElementById('pf-freq-obs').value||'').trim() : null;
+  var status = S.pacForm.status || 'ativo';
+  var tel = (document.getElementById('pf-tel').value||'').trim() || null;
+  var nasc = document.getElementById('pf-nasc').value || null;
+  var obs = (document.getElementById('pf-obs').value||'').trim() || null;
+  var pag1 = (document.getElementById('pf-pag1').value||'').trim() || null;
+  var pag2 = (document.getElementById('pf-pag2').value||'').trim() || null;
+
+  var registro = {
+    nome: nome,
+    doutora: doutora,
+    valor_padrao: valor,
+    frequencia: freq,
+    frequencia_obs: freqObs,
+    status: status,
+    telefone: tel,
+    data_nascimento: nasc,
+    observacao: obs,
+    pagador_1: pag1,
+    pagador_2: pag2,
+    criado_por: S.user.name
+  };
+
+  try {
+    if(f.id){
+      var res = await sb.from('nd_pacientes').update(registro).eq('id',f.id).select().single();
+      if(res.error) throw new Error(res.error.message);
+      // Atualiza local
+      for(var i=0;i<S.PACIENTES.length;i++){
+        if(S.PACIENTES[i].id===f.id){ S.PACIENTES[i] = res.data; break; }
+      }
+      showToast('Paciente atualizado.');
+    } else {
+      var res2 = await sb.from('nd_pacientes').insert(registro).select().single();
+      if(res2.error) throw new Error(res2.error.message);
+      S.PACIENTES.push(res2.data);
+      // Reordena
+      S.PACIENTES.sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'')});
+      showToast('Paciente cadastrado.');
+    }
+    S.pacForm = null;
+    S.view = null;
+    render();
+  } catch(e){
+    console.error('Erro salvar paciente:', e);
+    showToast('Erro: '+e.message, true);
+  }
+}
+
+async function excluirPaciente(){
+  var f = S.pacForm;
+  if(!f || !f.id) return;
+  if(!confirm('Remover o paciente "'+f.nome+'" da lista?\n\nO registro fica preservado e o Fábio pode recuperar se for engano.')) return;
+  try {
+    var res = await sb.from('nd_pacientes').update({
+      excluido: true,
+      excluido_em: new Date().toISOString(),
+      excluido_por: S.user.name
+    }).eq('id', f.id);
+    if(res.error) throw new Error(res.error.message);
+    // Remove da lista local (some da visão imediatamente)
+    S.PACIENTES = S.PACIENTES.filter(function(p){return p.id!==f.id});
+    S.pacForm = null;
+    S.view = null;
+    showToast('Paciente removido.');
+    render();
+  } catch(e){
+    console.error('Erro remover:', e);
+    showToast('Erro: '+e.message, true);
+  }
+}
+
+function renderAudit(){
+  var sorted=S.LANC.slice().reverse();
+  var html='<p class="stt">Trilha de Auditoria</p><p class="ssub">Movimentações do extrato e lançamentos manuais</p>';
+  if(sorted.length===0){
+    html+='<div class="empty"><div style="font-size:36px;opacity:.3;margin-bottom:10px">🔍</div><p>Nenhum registro ainda</p></div>';
+  }else{
+    for(var i=0;i<sorted.length;i++){
+      var t=sorted[i];
+      var catObj=null;
+      for(var j=0;j<CATS.length;j++)if(CATS[j].id===t.cat)catObj=CATS[j];
+      var badgeOrigem=t.origem==='extrato'?'<span style="display:inline-block;font-size:9px;font-weight:600;background:#E8E5DE;color:#666;padding:1px 6px;border-radius:20px;margin-left:6px;letter-spacing:.3px">SICOOB</span>':'';
+      html+='<div class="aud">'
+        +'<div class="aud-h"><span class="aud-u">👤 '+escapeHtml(t.por)+badgeOrigem+'</span><span class="aud-t">'+escapeHtml(t.em)+'</span></div>'
+        +'<div class="aud-d">'+(t.tipo==='receita'?'💰':'💸')+' '+escapeHtml(t.descricao)+'</div>'
+        +'<div class="aud-x">'+fmt(Number(t.valor))+' · '
+        +(t.flag==='conjunta'?'🤝 Conjunta (÷2)':t.flag==='neia'?'🔵 Néia':'🟢 Dany')
+        +(catObj?' · '+catObj.i+' '+catObj.l:'')
+        +(t.venc?' · Vence '+escapeHtml(t.venc):'')
+        +(t.obs?' · "'+escapeHtml(t.obs)+'"':'')
+        +'</div></div>';
+    }
+  }
+  html+='<div style="text-align:center;margin-top:20px"><button class="btn btn-sec btn-sm" id="btn-sair2">Sair</button></div>';
+  return html;
+}
+
+function renderTx(t){
+  var isRec=t.tipo==='receita';
+  var ic=isRec?'rec':(t.flag==='conjunta'?'conj':'desp');
+  var ico=isRec?'💰':(t.flag==='conjunta'?'🤝':'💸');
+  var tagC=t.flag==='conjunta'?'tag-c':(t.flag==='neia'?'tag-n':'tag-d');
+  var tagL=t.flag==='conjunta'?'Conjunta':(t.flag==='neia'?'Néia':'Dany');
+  var badgeOrigem=t.origem==='extrato'?'<span style="display:inline-block;font-size:9px;font-weight:600;background:#E8E5DE;color:#666;padding:1px 6px;border-radius:20px;margin-left:4px;letter-spacing:.3px">SICOOB</span>':'';
+  return '<div class="tx">'
+    +'<div class="tx-icon '+ic+'">'+ico+'</div>'
+    +'<div class="tx-info">'
+    +'<div class="tx-name">'+escapeHtml(t.descricao)+'</div>'
+    +'<div class="tx-meta">'+escapeHtml(t.data)+' · '+escapeHtml(t.por)+'</div>'
+    +'<span class="tx-tag '+tagC+'">'+tagL+'</span>'+badgeOrigem+'</div>'
+    +'<div class="tx-amt '+(isRec?'pos':'neg')+'">'+(isRec?'+':'-')+fmt(Number(t.valor))+'</div>'
+    +'</div>';
+}
+
+function escapeHtml(s){
+  if(s==null) return '';
+  return String(s).replace(/[&<>"']/g, function(c){
+    return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// BINDINGS
+// ═══════════════════════════════════════════════════════════════
+function bindLogin(){
+  var btn=document.getElementById('btn-entrar');
+  if(btn)btn.addEventListener('click',fazerLogin);
+  var pw=document.getElementById('ipw');
+  if(pw)pw.addEventListener('keypress',function(e){if(e.key==='Enter')fazerLogin();});
+}
+
+function bindApp(){
+  var navItems=document.querySelectorAll('.ni[data-tab]');
+  for(var i=0;i<navItems.length;i++){
+    (function(b){b.addEventListener('click',function(){
+      S.tab=b.dataset.tab;
+      S.view=null;
+      S.pacForm=null;
+      render();
+    });})(navItems[i]);
+  }
+  var togglers=document.querySelectorAll('[data-toggle]');
+  for(var j=0;j<togglers.length;j++){
+    (function(el){el.addEventListener('click',function(){var k=el.dataset.toggle;S.abre[k]=!S.abre[k];render();});})(togglers[j]);
+  }
+  var tipos=document.querySelectorAll('[data-tipo]');
+  for(var t=0;t<tipos.length;t++){
+    (function(c){c.addEventListener('click',function(){S.form.tipo=c.dataset.tipo;S.form.flag=c.dataset.tipo==='despesa'?'conjunta':'neia';render();});})(tipos[t]);
+  }
+  var flags=document.querySelectorAll('[data-flag]');
+  for(var f=0;f<flags.length;f++){
+    (function(b){b.addEventListener('click',function(){S.form.flag=b.dataset.flag;render();});})(flags[f]);
+  }
+  var fv=document.getElementById('f-val');
+  if(fv)fv.addEventListener('input',function(e){S.form.valor=e.target.value;render();});
+  var fd=document.getElementById('f-desc');
+  if(fd)fd.addEventListener('input',function(e){S.form.desc=e.target.value;});
+  var fc=document.getElementById('f-cat');
+  if(fc)fc.addEventListener('change',function(e){S.form.cat=e.target.value;});
+  var fvc=document.getElementById('f-venc');
+  if(fvc)fvc.addEventListener('change',function(e){S.form.venc=e.target.value;});
+  var fo=document.getElementById('f-obs');
+  if(fo)fo.addEventListener('input',function(e){S.form.obs=e.target.value;});
+  var bs=document.getElementById('btn-salvar');
+  if(bs)bs.addEventListener('click',salvar);
+  var s1=document.getElementById('btn-sair');
+  if(s1)s1.addEventListener('click',sair);
+  var s2=document.getElementById('btn-sair2');
+  if(s2)s2.addEventListener('click',sair);
+
+  // ── Pacientes ──
+  var btnPacNovo=document.getElementById('btn-pac-novo');
+  if(btnPacNovo)btnPacNovo.addEventListener('click',function(){
+    S.pacForm={status:'ativo',frequencia:'1x_semana'};
+    S.view='pacForm';
+    render();
+  });
+  var pacCards=document.querySelectorAll('[data-pac]');
+  for(var p=0;p<pacCards.length;p++){
+    (function(c){c.addEventListener('click',function(){
+      var pid=parseInt(c.dataset.pac,10);
+      for(var k=0;k<S.PACIENTES.length;k++){
+        if(S.PACIENTES[k].id===pid){
+          // Clone para edição (objeto separado)
+          var pat=S.PACIENTES[k];
+          S.pacForm={};
+          for(var key in pat) S.pacForm[key]=pat[key];
+          S.view='pacForm';
+          render();
+          return;
+        }
+      }
+    });})(pacCards[p]);
+  }
+  var fbs=document.querySelectorAll('[data-fp]');
+  for(var fb=0;fb<fbs.length;fb++){
+    (function(b){b.addEventListener('click',function(){S.pacFiltro=b.dataset.fp;render();});})(fbs[fb]);
+  }
+  var sts=document.querySelectorAll('[data-st]');
+  for(var st=0;st<sts.length;st++){
+    (function(b){b.addEventListener('click',function(){
+      if(!S.pacForm)S.pacForm={};
+      S.pacForm.status=b.dataset.st;
+      render();
+    });})(sts[st]);
+  }
+  var pfFreq=document.getElementById('pf-freq');
+  if(pfFreq)pfFreq.addEventListener('change',function(e){
+    var w=document.getElementById('pf-freq-obs-wrap');
+    if(w) w.style.display = (e.target.value==='outra') ? '' : 'none';
+    if(!S.pacForm)S.pacForm={};
+    S.pacForm.frequencia=e.target.value;
+  });
+  var btnPfCancelar=document.getElementById('btn-pf-cancelar');
+  if(btnPfCancelar)btnPfCancelar.addEventListener('click',function(){
+    S.pacForm=null;
+    S.view=null;
+    render();
+  });
+  var btnPfSalvar=document.getElementById('btn-pf-salvar');
+  if(btnPfSalvar)btnPfSalvar.addEventListener('click',salvarPaciente);
+  var btnPfExcluir=document.getElementById('btn-pf-excluir');
+  if(btnPfExcluir)btnPfExcluir.addEventListener('click',excluirPaciente);
+  var btnPacVoltar=document.getElementById('btn-pac-voltar');
+  if(btnPacVoltar)btnPacVoltar.addEventListener('click',function(){
+    S.pacForm=null;
+    S.view=null;
+    render();
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════
+// AÇÕES
+// ═══════════════════════════════════════════════════════════════
+async function fazerLogin(){
+  var em=document.getElementById('iem');
+  var pw=document.getElementById('ipw');
+  if(!em||!pw)return;
+  var email=em.value.trim().toLowerCase();
+  var pass=pw.value;
+  if(!email||!pass){S.erro='Informe e-mail e senha.';render();return;}
+
+  var btn=document.getElementById('btn-entrar');
+  if(btn){btn.disabled=true;btn.textContent='Entrando…';}
+
+  try {
+    var res = await sb.auth.signInWithPassword({email: email, password: pass});
+    if(res.error){
+      S.erro = 'E-mail ou senha inválidos.';
+      console.error(res.error);
+      render();
+      return;
+    }
+    var perfil = PERFIS[email];
+    if(!perfil){
+      S.erro = 'Usuário não autorizado.';
+      await sb.auth.signOut();
+      render();
+      return;
+    }
+    S.user = {email: email, name: perfil.name, role: perfil.role};
+    S.erro = null;
+    render();
+    var ok = await carregarDados();
+    if(ok) render();
+  } catch(e){
+    S.erro = 'Erro ao conectar. Tente novamente.';
+    console.error(e);
+    render();
+  }
+}
+
+async function sair(){
+  await sb.auth.signOut();
+  S.user = null;
+  S.ready = false;
+  S.tab = 'dashboard';
+  S.META = null; S.MAIO = null; S.HIST = []; S.LANC = []; S.PACIENTES = [];
+  render();
+}
+
+async function salvar(){
+  var f=S.form;
+  var valor=parseFloat(f.valor);
+  if(!f.desc.trim()){showToast('Descrição obrigatória.',true);return;}
+  if(isNaN(valor)||valor<=0){showToast('Valor inválido.',true);return;}
+
+  var btn=document.getElementById('btn-salvar');
+  if(btn){btn.disabled=true;btn.textContent='Salvando…';}
+
+  var registro = {
+    tipo: f.tipo,
+    descricao: f.desc.trim(),
+    valor: valor,
+    flag: f.flag,
+    cat: f.tipo==='despesa' ? f.cat : null,
+    venc: f.tipo==='despesa' && f.venc ? f.venc : null,
+    obs: f.obs.trim() || null,
+    data: today(),
+    por: S.user.name,
+    em: nowStr(),
+    origem: 'manual'
+  };
+
+  try {
+    var res = await sb.from('nd_lancamentos').insert(registro).select().single();
+    if(res.error){
+      console.error(res.error);
+      showToast('Erro ao salvar: '+res.error.message,true);
+      if(btn){btn.disabled=false;btn.textContent='💾 Salvar Lançamento';}
+      return;
+    }
+    S.LANC.push(res.data);
+    S.form = {tipo:'despesa', desc:'', valor:'', flag:'conjunta', cat:'fixo', venc:'', obs:''};
+    S.tab = 'dashboard';
+    showToast('Lançamento salvo ✅');
+  } catch(e){
+    console.error(e);
+    showToast('Erro ao salvar.',true);
+    if(btn){btn.disabled=false;btn.textContent='💾 Salvar Lançamento';}
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// INICIALIZAÇÃO
+// ═══════════════════════════════════════════════════════════════
+async function init(){
+  // Tenta restaurar sessão existente (login persistente)
+  var session = await sb.auth.getSession();
+  if(session.data && session.data.session){
+    var email = session.data.session.user.email;
+    var perfil = PERFIS[email];
+    if(perfil){
+      S.user = {email: email, name: perfil.name, role: perfil.role};
+      var ok = await carregarDados();
+      S.loading = false;
+      render();
+      return;
+    } else {
+      await sb.auth.signOut();
+    }
+  }
+  S.loading = false;
+  render();
+}
+
+init();
+</script>
+</body>
+</html>
+
