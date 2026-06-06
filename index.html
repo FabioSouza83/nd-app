@@ -310,9 +310,11 @@ var S = {
   HIST: [],
   LANC: [],
   ATEND: [],
+  PAC_NOMES: {},  // mapa id->nome de TODOS os pacientes (inclui excluídos)
   // Atendimentos (Onda 2.A)
   semOffset: 0,   // deslocamento de semanas na visão de Atendimentos
-  atView: null    // 'form' quando o formulário de novo atendimento está aberto
+  atView: null,   // 'form' quando o formulário de atendimento está aberto
+  atEdit: null    // objeto do atendimento em edição (null = novo)
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -345,13 +347,14 @@ function showToast(msg, isErr){
 // ═══════════════════════════════════════════════════════════════
 async function carregarDados(){
   try {
-    var [meta, saldos, hist, lanc, pac, atend] = await Promise.all([
+    var [meta, saldos, hist, lanc, pac, atend, pacAll] = await Promise.all([
       sb.from('nd_meta').select('*').eq('id',1).single(),
       sb.from('nd_saldos_mes').select('*').eq('id',1).single(),
       sb.from('nd_historico').select('*').order('ordem',{ascending:true}),
       sb.from('nd_lancamentos').select('*').order('created_at',{ascending:true}),
       sb.from('nd_pacientes').select('*').eq('excluido', false).order('nome',{ascending:true}),
-      sb.from('nd_atendimentos').select('*').eq('excluido', false).order('data_hora',{ascending:true})
+      sb.from('nd_atendimentos').select('*').eq('excluido', false).order('data_hora',{ascending:true}),
+      sb.from('nd_pacientes').select('id,nome')
     ]);
 
     if(meta.error) throw new Error('meta: '+meta.error.message);
@@ -360,6 +363,7 @@ async function carregarDados(){
     if(lanc.error) throw new Error('lanc: '+lanc.error.message);
     if(pac.error) throw new Error('pacientes: '+pac.error.message);
     if(atend.error) throw new Error('atendimentos: '+atend.error.message);
+    if(pacAll.error) throw new Error('pacientes(nomes): '+pacAll.error.message);
 
     S.META = meta.data;
     S.MAIO = saldos.data;
@@ -367,6 +371,9 @@ async function carregarDados(){
     S.LANC = lanc.data;
     S.PACIENTES = pac.data || [];
     S.ATEND = atend.data || [];
+    // Mapa id->nome de TODOS os pacientes (inclui excluídos) para a agenda não perder o nome
+    S.PAC_NOMES = {};
+    if(pacAll.data) for(var pn=0;pn<pacAll.data.length;pn++) S.PAC_NOMES[pacAll.data[pn].id]=pacAll.data[pn].nome;
     S.ready = true;
     return true;
   } catch(e){
@@ -988,8 +995,14 @@ function uuidv4(){
 }
 // data_hora é timestamptz (UTC). new Date(iso) volta para o fuso local → hora/dia corretos. Sem parse de string ano-mês.
 function fmtHora(iso){ var d=new Date(iso); return pad2(d.getHours())+':'+pad2(d.getMinutes()); }
+// ISO (UTC) -> valor de <input datetime-local> em hora local ('YYYY-MM-DDTHH:MM')
+function isoToLocalInput(iso){
+  var d=new Date(iso);
+  return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate())+'T'+pad2(d.getHours())+':'+pad2(d.getMinutes());
+}
 function pacNome(id){
   for(var i=0;i<S.PACIENTES.length;i++) if(S.PACIENTES[i].id===id) return S.PACIENTES[i].nome;
+  if(S.PAC_NOMES && S.PAC_NOMES[id]) return S.PAC_NOMES[id];
   return '(paciente removido)';
 }
 // Domingo (00:00 local) da semana atual, deslocado por 'offset' semanas. Convenção do app: semana Dom→Sex.
@@ -1067,6 +1080,7 @@ function renderAtendCard(a){
     +'<span class="at-hora">'+fmtHora(a.data_hora)+'</span>'
     +'<span class="at-nome">'+escapeHtml(pacNome(a.paciente_id))+serie+'</span>'
     +'<span class="at-chip '+statusAtendClass(a.status)+'">'+statusAtendLabel(a.status)+'</span>'
+    +'<button class="at-del" data-at-edit="'+a.id+'" title="Editar">✏️</button>'
     +btnSerie
     +'<button class="at-del" data-at-del="'+a.id+'" title="Remover só este">🗑️</button>'
     +'</div>'
@@ -1076,31 +1090,40 @@ function renderAtendCard(a){
 }
 
 function renderFormAtendimento(){
-  var defaultDr = S.user.role==='dany' ? 'dany' : 'neia';
+  var ed = S.atEdit;
+  var defaultDr = ed ? (ed.doutora||'neia') : (S.user.role==='dany' ? 'dany' : 'neia');
   var opts='<option value="">Selecione o paciente…</option>';
   for(var i=0;i<S.PACIENTES.length;i++){
     var p=S.PACIENTES[i];
-    opts+='<option value="'+p.id+'" data-dr="'+(p.doutora||'')+'" data-valor="'+(p.valor_padrao!=null?p.valor_padrao:'')+'">'+escapeHtml(p.nome)+'</option>';
+    var selp = (ed && ed.paciente_id===p.id) ? ' selected' : '';
+    opts+='<option value="'+p.id+'" data-dr="'+(p.doutora||'')+'" data-valor="'+(p.valor_padrao!=null?p.valor_padrao:'')+'"'+selp+'>'+escapeHtml(p.nome)+'</option>';
   }
-  return '<p class="stt">Novo atendimento</p>'
-    +'<div class="fg"><label>Paciente *</label><select id="at-pac">'+opts+'</select></div>'
-    +'<div class="fg"><label>Data e hora *</label><input type="datetime-local" id="at-dt"></div>'
-    +'<div class="fg"><label>Doutora</label><select id="at-dr">'
-    +'<option value="neia"'+(defaultDr==='neia'?' selected':'')+'>Dra. Néia</option>'
-    +'<option value="dany"'+(defaultDr==='dany'?' selected':'')+'>Dra. Dany</option>'
-    +'</select></div>'
-    +'<div class="fg"><label>Valor da sessão (R$)</label><input type="number" id="at-val" step="0.01" min="0" placeholder="Ex: 160,00"></div>'
-    +'<div class="fg"><label>Repetir</label><select id="at-rep">'
+  var dtVal = ed ? isoToLocalInput(ed.data_hora) : '';
+  var valVal = (ed && ed.valor!=null) ? ed.valor : '';
+  var obsVal = (ed && ed.observacao) ? escapeHtml(ed.observacao) : '';
+  // "Repetir" só faz sentido ao criar; na edição altera-se um único atendimento
+  var repBlock = ed ? '' : (
+    '<div class="fg"><label>Repetir</label><select id="at-rep">'
     +'<option value="nao">Não repetir</option>'
     +'<option value="semanal">Toda semana</option>'
     +'<option value="quinzenal">A cada 2 semanas</option>'
     +'</select></div>'
     +'<div class="fg" id="at-rep-qtd-wrap" style="display:none"><label>Quantas ocorrências</label>'
     +'<input type="number" id="at-rep-qtd" value="8" min="2" max="52" step="1"></div>'
-    +'<div class="fg"><label>Observação (opcional)</label><textarea id="at-obs" rows="2" style="resize:none"></textarea></div>'
+  );
+  return '<p class="stt">'+(ed?'Editar atendimento':'Novo atendimento')+'</p>'
+    +'<div class="fg"><label>Paciente *</label><select id="at-pac">'+opts+'</select></div>'
+    +'<div class="fg"><label>Data e hora *</label><input type="datetime-local" id="at-dt" value="'+dtVal+'"></div>'
+    +'<div class="fg"><label>Doutora</label><select id="at-dr">'
+    +'<option value="neia"'+(defaultDr==='neia'?' selected':'')+'>Dra. Néia</option>'
+    +'<option value="dany"'+(defaultDr==='dany'?' selected':'')+'>Dra. Dany</option>'
+    +'</select></div>'
+    +'<div class="fg"><label>Valor da sessão (R$)</label><input type="number" id="at-val" step="0.01" min="0" placeholder="Ex: 160,00" value="'+valVal+'"></div>'
+    +repBlock
+    +'<div class="fg"><label>Observação (opcional)</label><textarea id="at-obs" rows="2" style="resize:none">'+obsVal+'</textarea></div>'
     +'<div class="pf-actions">'
     +'<button class="btn btn-sec" id="btn-at-cancelar">Cancelar</button>'
-    +'<button class="btn" id="btn-at-salvar">Salvar</button>'
+    +'<button class="btn" id="btn-at-salvar">'+(ed?'Salvar alterações':'Salvar')+'</button>'
     +'</div>';
 }
 
@@ -1111,26 +1134,48 @@ async function salvarAtendimento(){
   var obs=(document.getElementById('at-obs').value||'').trim()||null;
   if(!pid){ showToast('Selecione o paciente.',true); return; }
   if(!dt){ showToast('Informe data e hora.',true); return; }
+  var valTxt=document.getElementById('at-val').value;
+  var valor = valTxt!=='' ? parseFloat(valTxt) : null;
+  if(valor!=null && (isNaN(valor)||valor<0)) valor=null;
+  // dt = 'YYYY-MM-DDTHH:MM' (hora local). new Date() interpreta como local; toISOString() grava em UTC. Correto.
+  var btn=document.getElementById('btn-at-salvar');
+
+  // ── Edição de um atendimento existente (UPDATE; não mexe na série) ──
+  if(S.atEdit){
+    if(btn){ btn.disabled=true; btn.textContent='Salvando…'; }
+    try{
+      var resU=await sb.from('nd_atendimentos').update({
+        paciente_id:parseInt(pid,10), doutora:dr, data_hora:new Date(dt).toISOString(), observacao:obs, valor:valor
+      }).eq('id',S.atEdit.id).select().single();
+      if(resU.error) throw new Error(resU.error.message);
+      for(var u=0;u<S.ATEND.length;u++) if(S.ATEND[u].id===S.atEdit.id){ S.ATEND[u]=resU.data; break; }
+      S.atEdit=null; S.atView=null;
+      showToast('Atendimento atualizado.');
+      render();
+    }catch(e){
+      console.error('Erro editar atendimento:',e);
+      showToast('Erro: '+e.message,true);
+      if(btn){ btn.disabled=false; btn.textContent='Salvar alterações'; }
+    }
+    return;
+  }
+
+  // ── Novo atendimento (INSERT, com recorrência opcional) ──
   var rep=document.getElementById('at-rep').value;
   var qtd=parseInt(document.getElementById('at-rep-qtd').value,10);
   if(!(qtd>0)) qtd=1;
   if(qtd>52) qtd=52;
-  // dt = 'YYYY-MM-DDTHH:MM' (hora local). new Date() interpreta como local; toISOString() grava em UTC. Correto.
   // Para a série, itero com setDate (preserva a hora local entre semanas e viradas de mês).
   var base=new Date(dt);
   var stepDias = rep==='quinzenal' ? 14 : 7;
   var n = rep==='nao' ? 1 : qtd;
   var sid = rep==='nao' ? null : uuidv4();
-  var valTxt=document.getElementById('at-val').value;
-  var valor = valTxt!=='' ? parseFloat(valTxt) : null;
-  if(valor!=null && (isNaN(valor)||valor<0)) valor=null;
   var rows=[];
   for(var i=0;i<n;i++){
     var occ=new Date(base.getTime());
     occ.setDate(occ.getDate()+stepDias*i);
     rows.push({ paciente_id:parseInt(pid,10), doutora:dr, data_hora:occ.toISOString(), status:'agendado', observacao:obs, serie_id:sid, valor:valor });
   }
-  var btn=document.getElementById('btn-at-salvar');
   if(btn){ btn.disabled=true; btn.textContent='Salvando…'; }
   try{
     var res=await sb.from('nd_atendimentos').insert(rows).select();
@@ -1409,6 +1454,7 @@ function bindApp(){
       S.view=null;
       S.pacForm=null;
       S.atView=null;
+      S.atEdit=null;
       S.semOffset=0;
       render();
     });})(navItems[i]);
@@ -1504,9 +1550,16 @@ function bindApp(){
 
   // ── Atendimentos (Onda 2.A) ──
   var btnAtAdd=document.getElementById('btn-at-add');
-  if(btnAtAdd)btnAtAdd.addEventListener('click',function(){ S.atView='form'; render(); });
+  if(btnAtAdd)btnAtAdd.addEventListener('click',function(){ S.atEdit=null; S.atView='form'; render(); });
   var btnAtCancelar=document.getElementById('btn-at-cancelar');
-  if(btnAtCancelar)btnAtCancelar.addEventListener('click',function(){ S.atView=null; render(); });
+  if(btnAtCancelar)btnAtCancelar.addEventListener('click',function(){ S.atView=null; S.atEdit=null; render(); });
+  var atEdits=document.querySelectorAll('[data-at-edit]');
+  for(var ae=0;ae<atEdits.length;ae++){
+    (function(b){b.addEventListener('click',function(){
+      var eid=parseInt(b.dataset.atEdit,10);
+      for(var k=0;k<S.ATEND.length;k++){ if(S.ATEND[k].id===eid){ var c={}; for(var key in S.ATEND[k]) c[key]=S.ATEND[k][key]; S.atEdit=c; S.atView='form'; render(); return; } }
+    });})(atEdits[ae]);
+  }
   var btnAtSalvar=document.getElementById('btn-at-salvar');
   if(btnAtSalvar)btnAtSalvar.addEventListener('click',salvarAtendimento);
   var atPac=document.getElementById('at-pac');
@@ -1596,8 +1649,8 @@ async function sair(){
   S.user = null;
   S.ready = false;
   S.tab = 'dashboard';
-  S.META = null; S.MAIO = null; S.HIST = []; S.LANC = []; S.PACIENTES = []; S.ATEND = [];
-  S.semOffset = 0; S.atView = null;
+  S.META = null; S.MAIO = null; S.HIST = []; S.LANC = []; S.PACIENTES = []; S.ATEND = []; S.PAC_NOMES = {};
+  S.semOffset = 0; S.atView = null; S.atEdit = null;
   render();
 }
 
