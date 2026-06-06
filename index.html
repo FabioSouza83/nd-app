@@ -250,6 +250,31 @@ html,body{height:100%;background:#E8E5DE;font-family:'DM Sans',sans-serif}
 .res-pos{color:var(--green)}
 .res-neg{color:var(--red)}
 .res-zero,.res-mut{color:#BBB}
+
+/* ── CAIXA DA EMPRESA ── */
+.cx-card{border-left:3px solid var(--navy)}
+.cx-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:6px}
+.cx-edit{background:var(--cream);border:1.5px solid #E0DDD6;border-radius:20px;padding:5px 11px;font-size:11px;font-weight:600;color:var(--navy);cursor:pointer;flex-shrink:0}
+.cx-help{font-size:11px;color:var(--gray);margin-bottom:12px;line-height:1.4}
+.cx-row{display:flex;justify-content:space-between;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid #F0EDE8;font-size:13px}
+.cx-l{color:var(--navy);display:flex;flex-direction:column}
+.cx-note{font-size:10px;color:var(--gray);font-weight:400}
+.cx-v{font-weight:600;white-space:nowrap}
+.cx-pos{color:var(--navy)}
+.cx-neg{color:var(--red)}
+.cx-zero{color:#BBB}
+.cx-mininote{font-size:10px;color:var(--gray);font-style:italic;padding:5px 0;border-bottom:1px solid #F0EDE8}
+.cx-livre{background:rgba(31,92,31,.07);border-radius:8px;padding:9px 10px;margin:6px 0;border-bottom:none}
+.cx-livre .cx-l{font-weight:700}
+.cx-livre .cx-v{color:var(--green);font-family:'DM Serif Display',serif;font-size:16px}
+.cx-margem{border-bottom:none;margin-top:2px}
+.cx-margem .cx-l{font-weight:700}
+.cx-margem .cx-v{font-family:'DM Serif Display',serif;font-size:16px}
+.cx-margem.ok .cx-v{color:var(--green)}
+.cx-margem.bad .cx-v{color:var(--red)}
+.cx-verdict{margin-top:10px;border-radius:8px;padding:10px 12px;font-size:12px;font-weight:600;line-height:1.4}
+.cx-verdict.ok{background:rgba(31,92,31,.08);color:var(--green)}
+.cx-verdict.bad{background:#FDECEA;color:var(--red)}
 </style>
 </head>
 <body>
@@ -314,7 +339,8 @@ var S = {
   // Atendimentos (Onda 2.A)
   semOffset: 0,   // deslocamento de semanas na visão de Atendimentos
   atView: null,   // 'form' quando o formulário de atendimento está aberto
-  atEdit: null    // objeto do atendimento em edição (null = novo)
+  atEdit: null,   // objeto do atendimento em edição (null = novo)
+  caixaEdit: false // true quando o Fábio está ajustando o Caixa da Empresa
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -557,6 +583,7 @@ function renderDash(){
     +'<div class="hero-tl">Total disponível</div>'
     +'<div class="hero-tv">'+fmt(totalDisp)+'</div>'
     +'</div>'
+    +renderCaixaEmpresa(totalDisp)
     +'<div class="card"><div class="card-title">Evolução 2026</div>'
     +'<div class="evo-wrap">'+barras+'</div>'
     +'<div style="display:flex;gap:12px;margin-top:10px;justify-content:center">'
@@ -567,6 +594,75 @@ function renderDash(){
     +'<p class="stt">Últimos Lançamentos</p>'
     +txHtml
     +'<div style="text-align:center;margin-top:20px"><button class="btn btn-sec btn-sm" id="btn-sair">Sair</button></div>';
+}
+
+// ═══════════════════════════════════════════════════════════════
+// CAIXA DA EMPRESA — política de reserva (réplica explicativa do Excel)
+// ═══════════════════════════════════════════════════════════════
+function renderCaixaEmpresa(totalDisp){
+  var M=S.MAIO;
+  var extrato=Number(M.extrato)||0;
+  var das=Number(M.das)||0, inss=Number(M.inss)||0, contab=Number(M.contabilidade)||0;
+  var provisao=Number(M.prov_n)+Number(M.prov_d);
+  var reserva=(M.reserva_min!=null)?Number(M.reserva_min):RESERVA_MIN;
+  var caixaLivre=extrato-das-inss-contab-provisao-reserva;
+  var margem=caixaLivre-totalDisp;
+  var ok=margem>=0;
+  var canEdit=S.user.role==='fabio';
+
+  if(S.caixaEdit && canEdit){
+    return '<div class="card cx-card">'
+      +'<div class="card-title">Caixa da empresa · ajustar obrigações</div>'
+      +'<p class="cx-help">Valores do mês que saem do caixa da empresa (PJ). Atualize conforme o contador/planilha.</p>'
+      +'<div class="fg"><label>DAS (Simples Nacional)</label><input type="number" id="cx-das" step="0.01" min="0" value="'+das+'"></div>'
+      +'<div class="fg"><label>INSS</label><input type="number" id="cx-inss" step="0.01" min="0" value="'+inss+'"></div>'
+      +'<div class="fg"><label>Contabilidade</label><input type="number" id="cx-contab" step="0.01" min="0" value="'+contab+'"></div>'
+      +'<div class="fg"><label>Reserva mínima de segurança</label><input type="number" id="cx-reserva" step="0.01" min="0" value="'+reserva+'"></div>'
+      +'<div class="pf-actions"><button class="btn btn-sec" id="btn-cx-cancelar">Cancelar</button><button class="btn" id="btn-cx-salvar">Salvar</button></div>'
+      +'</div>';
+  }
+
+  function ln(label,val,cls,note){
+    var disp = val<0 ? '('+fmt(Math.abs(val))+')' : fmt(val);
+    var vcls = (val===0) ? 'cx-zero' : (cls||'');
+    return '<div class="cx-row"><span class="cx-l">'+label+(note?'<span class="cx-note">'+note+'</span>':'')+'</span><span class="cx-v '+vcls+'">'+disp+'</span></div>';
+  }
+  var editBtn = canEdit ? '<button class="cx-edit" id="btn-cx-editar" title="Ajustar valores">✏️ Ajustar</button>' : '';
+  return '<div class="card cx-card">'
+    +'<div class="cx-head"><div class="card-title" style="margin:0">Caixa da empresa</div>'+editBtn+'</div>'
+    +'<p class="cx-help">Quanto a empresa pode pagar de retiradas com segurança neste mês.</p>'
+    +ln('Saldo no banco', extrato, 'cx-pos')
+    +ln('(–) DAS', -das, 'cx-neg')
+    +ln('(–) INSS', -inss, 'cx-neg')
+    +ln('(–) Contabilidade', -contab, 'cx-neg')
+    +'<div class="cx-mininote">↑ Obrigações da empresa (PJ) — não saem do saldo individual das sócias.</div>'
+    +ln('(–) Provisão de encargos', -provisao, 'cx-neg')
+    +ln('(–) Reserva de segurança', -reserva, 'cx-neg', 'sempre guardamos para imprevistos')
+    +'<div class="cx-row cx-livre"><span class="cx-l">Caixa livre para retiradas</span><span class="cx-v">'+fmt(caixaLivre)+'</span></div>'
+    +ln('(–) Retiradas das sócias', -totalDisp, 'cx-neg')
+    +'<div class="cx-row cx-margem '+(ok?'ok':'bad')+'"><span class="cx-l">Margem após retiradas</span><span class="cx-v">'+(margem<0?'('+fmt(Math.abs(margem))+')':fmt(margem))+'</span></div>'
+    +'<div class="cx-verdict '+(ok?'ok':'bad')+'">'+(ok?'✅ Caixa suficiente para todas as retiradas, com margem positiva.':'⚠️ Atenção: as retiradas previstas passam do caixa livre. Reveja antes de retirar.')+'</div>'
+    +'</div>';
+}
+
+async function salvarCaixa(){
+  var das=parseFloat(document.getElementById('cx-das').value); if(isNaN(das)||das<0) das=0;
+  var inss=parseFloat(document.getElementById('cx-inss').value); if(isNaN(inss)||inss<0) inss=0;
+  var contab=parseFloat(document.getElementById('cx-contab').value); if(isNaN(contab)||contab<0) contab=0;
+  var reserva=parseFloat(document.getElementById('cx-reserva').value); if(isNaN(reserva)||reserva<0) reserva=0;
+  var btn=document.getElementById('btn-cx-salvar'); if(btn){ btn.disabled=true; btn.textContent='Salvando…'; }
+  try{
+    var res=await sb.from('nd_saldos_mes').update({das:das,inss:inss,contabilidade:contab,reserva_min:reserva}).eq('id',1).select().single();
+    if(res.error) throw new Error(res.error.message);
+    S.MAIO=res.data;
+    S.caixaEdit=false;
+    showToast('Caixa da empresa atualizado.');
+    render();
+  }catch(e){
+    console.error('Erro salvar caixa:',e);
+    showToast('Erro: '+e.message,true);
+    if(btn){ btn.disabled=false; btn.textContent='Salvar'; }
+  }
 }
 
 function renderHist(){
@@ -1455,6 +1551,7 @@ function bindApp(){
       S.pacForm=null;
       S.atView=null;
       S.atEdit=null;
+      S.caixaEdit=false;
       S.semOffset=0;
       render();
     });})(navItems[i]);
@@ -1487,6 +1584,14 @@ function bindApp(){
   if(s1)s1.addEventListener('click',sair);
   var s2=document.getElementById('btn-sair2');
   if(s2)s2.addEventListener('click',sair);
+
+  // ── Caixa da Empresa ──
+  var btnCxEditar=document.getElementById('btn-cx-editar');
+  if(btnCxEditar)btnCxEditar.addEventListener('click',function(){ S.caixaEdit=true; render(); });
+  var btnCxCancelar=document.getElementById('btn-cx-cancelar');
+  if(btnCxCancelar)btnCxCancelar.addEventListener('click',function(){ S.caixaEdit=false; render(); });
+  var btnCxSalvar=document.getElementById('btn-cx-salvar');
+  if(btnCxSalvar)btnCxSalvar.addEventListener('click',salvarCaixa);
 
   // ── Pacientes ──
   var btnPacNovo=document.getElementById('btn-pac-novo');
@@ -1650,7 +1755,7 @@ async function sair(){
   S.ready = false;
   S.tab = 'dashboard';
   S.META = null; S.MAIO = null; S.HIST = []; S.LANC = []; S.PACIENTES = []; S.ATEND = []; S.PAC_NOMES = {};
-  S.semOffset = 0; S.atView = null; S.atEdit = null;
+  S.semOffset = 0; S.atView = null; S.atEdit = null; S.caixaEdit = false;
   render();
 }
 
