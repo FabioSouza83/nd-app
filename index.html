@@ -199,6 +199,7 @@ html,body{height:100%;background:#E8E5DE;font-family:'DM Sans',sans-serif}
 .at-top{display:flex;align-items:center;gap:9px}
 .at-hora{font-family:'DM Serif Display',serif;font-size:15px;color:var(--navy);min-width:46px}
 .at-nome{font-size:13px;font-weight:600;color:var(--navy);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.at-serie{font-size:11px;margin-left:5px}
 .at-del{background:none;border:none;cursor:pointer;font-size:13px;opacity:.55;flex-shrink:0;padding:0 2px}
 .at-del:hover{opacity:1}
 .at-actions{display:flex;gap:5px;overflow-x:auto;margin-top:9px;padding-bottom:2px}
@@ -939,6 +940,13 @@ function statusAtendLabel(s){
 function statusAtendClass(s){ return 'at-'+s; }
 function drLabel(d){ return d==='dany' ? 'Dra. Dany' : 'Dra. Néia'; }
 function pad2(n){ return ('0'+n).slice(-2); }
+function uuidv4(){
+  if(window.crypto && crypto.randomUUID){ try { return crypto.randomUUID(); } catch(e){} }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g,function(c){
+    var r=Math.random()*16|0, v=(c==='x')?r:((r&0x3)|0x8);
+    return v.toString(16);
+  });
+}
 // data_hora é timestamptz (UTC). new Date(iso) volta para o fuso local → hora/dia corretos. Sem parse de string ano-mês.
 function fmtHora(iso){ var d=new Date(iso); return pad2(d.getHours())+':'+pad2(d.getMinutes()); }
 function pacNome(id){
@@ -1006,12 +1014,15 @@ function renderAtendCard(a){
     var st=ATEND_STATUS[i];
     acts+='<button class="at-act'+(a.status===st.id?' on':'')+'" data-at-st="'+st.id+'" data-at-id="'+a.id+'">'+st.l+'</button>';
   }
+  var serie = a.serie_id ? '<span class="at-serie" title="Atendimento recorrente">🔁</span>' : '';
+  var btnSerie = a.serie_id ? '<button class="at-del" data-at-delserie="'+a.serie_id+'" data-at-from="'+a.data_hora+'" title="Remover esta e as próximas da série">🔁✕</button>' : '';
   return '<div class="at-card '+dr+'">'
     +'<div class="at-top">'
     +'<span class="at-hora">'+fmtHora(a.data_hora)+'</span>'
-    +'<span class="at-nome">'+escapeHtml(pacNome(a.paciente_id))+'</span>'
+    +'<span class="at-nome">'+escapeHtml(pacNome(a.paciente_id))+serie+'</span>'
     +'<span class="at-chip '+statusAtendClass(a.status)+'">'+statusAtendLabel(a.status)+'</span>'
-    +'<button class="at-del" data-at-del="'+a.id+'" title="Remover">🗑️</button>'
+    +btnSerie
+    +'<button class="at-del" data-at-del="'+a.id+'" title="Remover só este">🗑️</button>'
     +'</div>'
     +'<div style="font-size:11px;font-weight:600;margin-top:3px;'+drColor+'">'+drLabel(dr)+'</div>'
     +'<div class="at-actions">'+acts+'</div>'
@@ -1032,6 +1043,13 @@ function renderFormAtendimento(){
     +'<option value="neia"'+(defaultDr==='neia'?' selected':'')+'>Dra. Néia</option>'
     +'<option value="dany"'+(defaultDr==='dany'?' selected':'')+'>Dra. Dany</option>'
     +'</select></div>'
+    +'<div class="fg"><label>Repetir</label><select id="at-rep">'
+    +'<option value="nao">Não repetir</option>'
+    +'<option value="semanal">Toda semana</option>'
+    +'<option value="quinzenal">A cada 2 semanas</option>'
+    +'</select></div>'
+    +'<div class="fg" id="at-rep-qtd-wrap" style="display:none"><label>Quantas ocorrências</label>'
+    +'<input type="number" id="at-rep-qtd" value="8" min="2" max="52" step="1"></div>'
     +'<div class="fg"><label>Observação (opcional)</label><textarea id="at-obs" rows="2" style="resize:none"></textarea></div>'
     +'<div class="pf-actions">'
     +'<button class="btn btn-sec" id="btn-at-cancelar">Cancelar</button>'
@@ -1046,17 +1064,30 @@ async function salvarAtendimento(){
   var obs=(document.getElementById('at-obs').value||'').trim()||null;
   if(!pid){ showToast('Selecione o paciente.',true); return; }
   if(!dt){ showToast('Informe data e hora.',true); return; }
+  var rep=document.getElementById('at-rep').value;
+  var qtd=parseInt(document.getElementById('at-rep-qtd').value,10);
+  if(!(qtd>0)) qtd=1;
+  if(qtd>52) qtd=52;
   // dt = 'YYYY-MM-DDTHH:MM' (hora local). new Date() interpreta como local; toISOString() grava em UTC. Correto.
-  var iso=new Date(dt).toISOString();
+  // Para a série, itero com setDate (preserva a hora local entre semanas e viradas de mês).
+  var base=new Date(dt);
+  var stepDias = rep==='quinzenal' ? 14 : 7;
+  var n = rep==='nao' ? 1 : qtd;
+  var sid = rep==='nao' ? null : uuidv4();
+  var rows=[];
+  for(var i=0;i<n;i++){
+    var occ=new Date(base.getTime());
+    occ.setDate(occ.getDate()+stepDias*i);
+    rows.push({ paciente_id:parseInt(pid,10), doutora:dr, data_hora:occ.toISOString(), status:'agendado', observacao:obs, serie_id:sid });
+  }
   var btn=document.getElementById('btn-at-salvar');
   if(btn){ btn.disabled=true; btn.textContent='Salvando…'; }
-  var registro={ paciente_id:parseInt(pid,10), doutora:dr, data_hora:iso, status:'agendado', observacao:obs };
   try{
-    var res=await sb.from('nd_atendimentos').insert(registro).select().single();
+    var res=await sb.from('nd_atendimentos').insert(rows).select();
     if(res.error) throw new Error(res.error.message);
-    S.ATEND.push(res.data);
+    for(var r=0;r<res.data.length;r++) S.ATEND.push(res.data[r]);
     S.atView=null;
-    showToast('Atendimento agendado.');
+    showToast(n>1 ? (n+' atendimentos agendados (série).') : 'Atendimento agendado.');
     render();
   }catch(e){
     console.error('Erro salvar atendimento:',e);
@@ -1092,6 +1123,25 @@ async function excluirAtendimento(id){
     render();
   }catch(e){
     console.error('Erro remover atendimento:',e);
+    showToast('Erro: '+e.message,true);
+  }
+}
+
+async function excluirSerie(serieId, fromIso){
+  if(!confirm('Remover TODOS os atendimentos desta série a partir deste (inclusive os futuros)?\n\nSoft-delete: podem ser recuperados pelo Fábio.')) return;
+  try{
+    var res=await sb.from('nd_atendimentos').update({
+      excluido:true,
+      excluido_em:new Date().toISOString(),
+      excluido_por:S.user.email
+    }).eq('serie_id',serieId).eq('excluido',false).gte('data_hora',fromIso);
+    if(res.error) throw new Error(res.error.message);
+    var fromT=new Date(fromIso).getTime();
+    S.ATEND=S.ATEND.filter(function(a){ return !(a.serie_id===serieId && new Date(a.data_hora).getTime()>=fromT); });
+    showToast('Série removida (deste em diante).');
+    render();
+  }catch(e){
+    console.error('Erro remover série:',e);
     showToast('Erro: '+e.message,true);
   }
 }
@@ -1271,6 +1321,11 @@ function bindApp(){
     var dr=opt?opt.getAttribute('data-dr'):'';
     if(dr){ var sel=document.getElementById('at-dr'); if(sel) sel.value=dr; }
   });
+  var atRep=document.getElementById('at-rep');
+  if(atRep)atRep.addEventListener('change',function(e){
+    var w=document.getElementById('at-rep-qtd-wrap');
+    if(w) w.style.display = (e.target.value==='nao') ? 'none' : '';
+  });
   var btnSemPrev=document.getElementById('btn-sem-prev');
   if(btnSemPrev)btnSemPrev.addEventListener('click',function(){ S.semOffset--; render(); });
   var btnSemNext=document.getElementById('btn-sem-next');
@@ -1288,6 +1343,12 @@ function bindApp(){
     (function(b){b.addEventListener('click',function(){
       excluirAtendimento(parseInt(b.dataset.atDel,10));
     });})(atDels[ad]);
+  }
+  var atDelSeries=document.querySelectorAll('[data-at-delserie]');
+  for(var ds=0;ds<atDelSeries.length;ds++){
+    (function(b){b.addEventListener('click',function(){
+      excluirSerie(b.dataset.atDelserie, b.dataset.atFrom);
+    });})(atDelSeries[ds]);
   }
 }
 
