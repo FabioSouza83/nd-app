@@ -445,10 +445,12 @@ function calcDisp(){
     }
   }
   var M=S.MAIO;
+  // Custos fixos da empresa rateados 50/50 entre as dras (hoje: contabilidade; futuro: água/luz/internet)
+  var contabMeta = (M.contabilidade!=null) ? Number(M.contabilidade)/2 : 0;
   return {
-    neia: Number(M.ant_n)+Number(M.rec_n)+rn-Number(M.desp_n)-dn-Number(M.plab_n)-Number(M.prov_n),
-    dany: Number(M.ant_d)+Number(M.rec_d)+rd-Number(M.desp_d)-dd-Number(M.plab_d)-Number(M.prov_d),
-    rn:rn, rd:rd, dn:dn, dd:dd  // manuais: receitas/despesas por sócia (p/ detalhar no card)
+    neia: Number(M.ant_n)+Number(M.rec_n)+rn-Number(M.desp_n)-dn-Number(M.plab_n)-Number(M.prov_n)-contabMeta,
+    dany: Number(M.ant_d)+Number(M.rec_d)+rd-Number(M.desp_d)-dd-Number(M.plab_d)-Number(M.prov_d)-contabMeta,
+    rn:rn, rd:rd, dn:dn, dd:dd, contab:contabMeta  // manuais por sócia + contabilidade rateada 50/50
   };
 }
 
@@ -540,11 +542,12 @@ function renderDash(){
   var d=calcDisp();
   var M=S.MAIO;
 
-  var sCard=function(name,cls,ant,rec,desp,compras,plab,prov,disp_val){
+  var sCard=function(name,cls,ant,rec,desp,compras,plab,prov,contab,disp_val){
     var isLow=disp_val<=0;
     var dispTxt=isLow?'R$\u00A00,00':fmt(disp_val);
     var alertTxt=isLow?'<div class="sc-alert">Aguardando próximas receitas</div>':'';
     var comprasLine=compras>0?'<div class="sc-line"><span class="sc-line-l">(–) Compras do mês</span><span class="sc-line-v">('+fmt(compras)+')</span></div>':'';
+    var contabLine=contab>0?'<div class="sc-line"><span class="sc-line-l">(–) Contabilidade (50%)</span><span class="sc-line-v">('+fmt(contab)+')</span></div>':'';
     var plabLine=plab>0?'<div class="sc-line"><span class="sc-line-l">(–) Pró-labore</span><span class="sc-line-v">('+fmt(plab)+')</span></div>':'';
     return '<div class="sc '+cls+'">'
       +'<div class="sc-name '+cls+'">'+name+'</div>'
@@ -554,6 +557,7 @@ function renderDash(){
       +comprasLine
       +plabLine
       +'<div class="sc-line"><span class="sc-line-l">(–) Provisão</span><span class="sc-line-v">('+fmt(prov)+')</span></div>'
+      +contabLine
       +'<div class="sc-disp"><span class="sc-disp-l">Disponível agora</span><span class="sc-disp-v">'+dispTxt+'</span></div>'
       +alertTxt+'</div>';
   };
@@ -596,8 +600,8 @@ function renderDash(){
     +'<div class="hero">'
     +'<div class="hero-label">Disponível para retirada — '+fmtMesRef(S.MAIO.mes_ref)+'</div>'
     +'<div class="scards">'
-    +sCard('Néia','neia',Number(M.ant_n),Number(M.rec_n)+d.rn,Number(M.desp_n),d.dn,Number(M.plab_n),Number(M.prov_n),d.neia)
-    +sCard('Dany','dany',Number(M.ant_d),Number(M.rec_d)+d.rd,Number(M.desp_d),d.dd,Number(M.plab_d),Number(M.prov_d),d.dany)
+    +sCard('Néia','neia',Number(M.ant_n),Number(M.rec_n)+d.rn,Number(M.desp_n),d.dn,Number(M.plab_n),Number(M.prov_n),d.contab,d.neia)
+    +sCard('Dany','dany',Number(M.ant_d),Number(M.rec_d)+d.rd,Number(M.desp_d),d.dd,Number(M.plab_d),Number(M.prov_d),d.contab,d.dany)
     +'</div>'
     +'<div class="hero-tl">Total disponível</div>'
     +'<div class="hero-tv">'+fmt(totalDisp)+'</div>'
