@@ -602,10 +602,11 @@ function renderDash(){
 function renderCaixaEmpresa(totalDisp){
   var M=S.MAIO;
   var extrato=Number(M.extrato)||0;
-  var das=Number(M.das)||0, inss=Number(M.inss)||0, contab=Number(M.contabilidade)||0;
+  var contab=Number(M.contabilidade)||0;
   var provisao=Number(M.prov_n)+Number(M.prov_d);
   var reserva=(M.reserva_min!=null)?Number(M.reserva_min):RESERVA_MIN;
-  var caixaLivre=extrato-das-inss-contab-provisao-reserva;
+  // Modelo (A): o imposto já está representado pela provisão (≈6% do faturamento) — uma linha só, sem DAS/INSS separados (evita contar em dobro).
+  var caixaLivre=extrato-contab-provisao-reserva;
   var margem=caixaLivre-totalDisp;
   var ok=margem>=0;
   var canEdit=S.user.role==='fabio';
@@ -613,9 +614,7 @@ function renderCaixaEmpresa(totalDisp){
   if(S.caixaEdit && canEdit){
     return '<div class="card cx-card">'
       +'<div class="card-title">Caixa da empresa · ajustar obrigações</div>'
-      +'<p class="cx-help">Valores do mês que saem do caixa da empresa (PJ). Atualize conforme o contador/planilha.</p>'
-      +'<div class="fg"><label>DAS (Simples Nacional)</label><input type="number" id="cx-das" step="0.01" min="0" value="'+das+'"></div>'
-      +'<div class="fg"><label>INSS</label><input type="number" id="cx-inss" step="0.01" min="0" value="'+inss+'"></div>'
+      +'<p class="cx-help">Custos fixos da empresa neste mês. O imposto (provisão ≈6% do faturamento) já é calculado — não se digita aqui.</p>'
       +'<div class="fg"><label>Contabilidade</label><input type="number" id="cx-contab" step="0.01" min="0" value="'+contab+'"></div>'
       +'<div class="fg"><label>Reserva mínima de segurança</label><input type="number" id="cx-reserva" step="0.01" min="0" value="'+reserva+'"></div>'
       +'<div class="pf-actions"><button class="btn btn-sec" id="btn-cx-cancelar">Cancelar</button><button class="btn" id="btn-cx-salvar">Salvar</button></div>'
@@ -632,11 +631,9 @@ function renderCaixaEmpresa(totalDisp){
     +'<div class="cx-head"><div class="card-title" style="margin:0">Caixa da empresa</div>'+editBtn+'</div>'
     +'<p class="cx-help">Quanto a empresa pode pagar de retiradas com segurança neste mês.</p>'
     +ln('Saldo no banco', extrato, 'cx-pos')
-    +ln('(–) DAS', -das, 'cx-neg')
-    +ln('(–) INSS', -inss, 'cx-neg')
     +ln('(–) Contabilidade', -contab, 'cx-neg')
+    +ln('(–) Impostos e encargos', -provisao, 'cx-neg', 'reserva de DAS/INSS do mês (≈6%)')
     +'<div class="cx-mininote">↑ Obrigações da empresa (PJ) — não saem do saldo individual das sócias.</div>'
-    +ln('(–) Provisão de encargos', -provisao, 'cx-neg')
     +ln('(–) Reserva de segurança', -reserva, 'cx-neg', 'sempre guardamos para imprevistos')
     +'<div class="cx-row cx-livre"><span class="cx-l">Caixa livre para retiradas</span><span class="cx-v">'+fmt(caixaLivre)+'</span></div>'
     +ln('(–) Retiradas das sócias', -totalDisp, 'cx-neg')
@@ -646,13 +643,11 @@ function renderCaixaEmpresa(totalDisp){
 }
 
 async function salvarCaixa(){
-  var das=parseFloat(document.getElementById('cx-das').value); if(isNaN(das)||das<0) das=0;
-  var inss=parseFloat(document.getElementById('cx-inss').value); if(isNaN(inss)||inss<0) inss=0;
   var contab=parseFloat(document.getElementById('cx-contab').value); if(isNaN(contab)||contab<0) contab=0;
   var reserva=parseFloat(document.getElementById('cx-reserva').value); if(isNaN(reserva)||reserva<0) reserva=0;
   var btn=document.getElementById('btn-cx-salvar'); if(btn){ btn.disabled=true; btn.textContent='Salvando…'; }
   try{
-    var res=await sb.from('nd_saldos_mes').update({das:das,inss:inss,contabilidade:contab,reserva_min:reserva}).eq('id',1).select().single();
+    var res=await sb.from('nd_saldos_mes').update({contabilidade:contab,reserva_min:reserva}).eq('id',1).select().single();
     if(res.error) throw new Error(res.error.message);
     S.MAIO=res.data;
     S.caixaEdit=false;
