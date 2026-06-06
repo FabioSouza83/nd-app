@@ -413,6 +413,8 @@ async function carregarDados(){
 // CÁLCULOS (usam S.MAIO e S.LANC)
 // ═══════════════════════════════════════════════════════════════
 function calcDisp(){
+  // Mês de referência atual ('YYYY-MM'): compras/parcelas com vencimento FUTURO não entram no disponível agora
+  var mesAtual = (S.MAIO && S.MAIO.mes_ref) ? String(S.MAIO.mes_ref).slice(0,7) : '';
   var rn=0,rd=0,dn=0,dd=0;
   for(var i=0;i<S.LANC.length;i++){
     var t=S.LANC[i];
@@ -423,6 +425,9 @@ function calcDisp(){
       if(t.flag==='neia') rn+=Number(t.valor);
       else rd+=Number(t.valor);
     } else {
+      // Despesa parcelada/futura: só reduz o disponível quando vence neste mês ou antes
+      var vmes = t.venc ? String(t.venc).slice(0,7) : null;
+      if(vmes && mesAtual && vmes > mesAtual) continue;
       if(t.flag==='conjunta'){dn+=Number(t.valor)/2;dd+=Number(t.valor)/2;}
       else if(t.flag==='neia') dn+=Number(t.valor);
       else dd+=Number(t.valor);
@@ -528,7 +533,7 @@ function renderDash(){
     var isLow=disp_val<=0;
     var dispTxt=isLow?'R$\u00A00,00':fmt(disp_val);
     var alertTxt=isLow?'<div class="sc-alert">Aguardando próximas receitas</div>':'';
-    var comprasLine=compras>0?'<div class="sc-line"><span class="sc-line-l">(–) Compras lançadas</span><span class="sc-line-v">('+fmt(compras)+')</span></div>':'';
+    var comprasLine=compras>0?'<div class="sc-line"><span class="sc-line-l">(–) Compras do mês</span><span class="sc-line-v">('+fmt(compras)+')</span></div>':'';
     var plabLine=plab>0?'<div class="sc-line"><span class="sc-line-l">(–) Pró-labore</span><span class="sc-line-v">('+fmt(plab)+')</span></div>':'';
     return '<div class="sc '+cls+'">'
       +'<div class="sc-name '+cls+'">'+name+'</div>'
