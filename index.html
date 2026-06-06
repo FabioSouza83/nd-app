@@ -190,6 +190,7 @@ html,body{height:100%;background:#E8E5DE;font-family:'DM Sans',sans-serif}
 .at-wnav{background:var(--cream);border:1.5px solid #E0DDD6;border-radius:10px;padding:6px 13px;cursor:pointer;font-size:14px;color:var(--navy);flex-shrink:0}
 .at-wlbl{font-size:13px;font-weight:700;color:var(--navy);text-align:center}
 .at-wsub{font-size:10px;color:var(--gray);text-align:center;margin-top:1px}
+.at-wprev{font-size:11px;font-weight:700;color:var(--green);text-align:center;margin-top:3px}
 .at-day{margin-bottom:16px}
 .at-day-tt{font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.8px;margin:0 0 8px 4px}
 .at-day-empty{font-size:12px;color:#BBB;padding:2px 4px 6px;font-style:italic}
@@ -967,13 +968,19 @@ function renderAtendimentos(){
   var fim=new Date(ws.getFullYear(),ws.getMonth(),ws.getDate()); fim.setDate(fim.getDate()+5); // Sexta
 
   // Agrupa atendimentos da semana (Domingo a Sexta) por dia
+  // 'Previsto' = soma dos valores faturáveis (agendado, realizado, falta faturada). Semente dos Recebíveis.
+  var FATURAVEL={agendado:1, realizado:1, falta_faturada:1};
   var dias=[[],[],[],[],[],[]];
+  var previsto=0;
   for(var i=0;i<S.ATEND.length;i++){
     var a=S.ATEND[i];
     var d=new Date(a.data_hora);
     var dMid=new Date(d.getFullYear(),d.getMonth(),d.getDate());
     var diff=Math.round((dMid-ws)/86400000);
-    if(diff>=0 && diff<=5) dias[diff].push(a);
+    if(diff>=0 && diff<=5){
+      dias[diff].push(a);
+      if(FATURAVEL[a.status] && a.valor!=null) previsto+=Number(a.valor);
+    }
   }
   var total=0;
   for(var z=0;z<6;z++){ total+=dias[z].length; dias[z].sort(function(x,y){return new Date(x.data_hora)-new Date(y.data_hora)}); }
@@ -981,11 +988,12 @@ function renderAtendimentos(){
   var lblIni=pad2(ws.getDate())+'/'+pad2(ws.getMonth()+1);
   var lblFim=pad2(fim.getDate())+'/'+pad2(fim.getMonth()+1);
   var sub = S.semOffset===0 ? 'Esta semana' : (S.semOffset<0 ? 'Semana anterior' : 'Próxima semana');
+  var prevTxt = previsto>0 ? '<div class="at-wprev">Previsto faturável · '+fmt(previsto)+'</div>' : '';
 
   var html='<p class="stt">Atendimentos</p>'
     +'<div class="at-week">'
     +'<button class="at-wnav" id="btn-sem-prev">◀</button>'
-    +'<div><div class="at-wlbl">'+lblIni+' – '+lblFim+'</div><div class="at-wsub">'+sub+' · '+total+' atend.</div></div>'
+    +'<div><div class="at-wlbl">'+lblIni+' – '+lblFim+'</div><div class="at-wsub">'+sub+' · '+total+' atend.</div>'+prevTxt+'</div>'
     +'<button class="at-wnav" id="btn-sem-next">▶</button>'
     +'</div>'
     +'<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">'
@@ -1024,7 +1032,7 @@ function renderAtendCard(a){
     +btnSerie
     +'<button class="at-del" data-at-del="'+a.id+'" title="Remover só este">🗑️</button>'
     +'</div>'
-    +'<div style="font-size:11px;font-weight:600;margin-top:3px;'+drColor+'">'+drLabel(dr)+'</div>'
+    +'<div style="font-size:11px;font-weight:600;margin-top:3px;'+drColor+'">'+drLabel(dr)+(a.valor!=null?'<span style="color:var(--gray)"> · '+fmt(Number(a.valor))+'</span>':'')+'</div>'
     +'<div class="at-actions">'+acts+'</div>'
     +'</div>';
 }
@@ -1034,7 +1042,7 @@ function renderFormAtendimento(){
   var opts='<option value="">Selecione o paciente…</option>';
   for(var i=0;i<S.PACIENTES.length;i++){
     var p=S.PACIENTES[i];
-    opts+='<option value="'+p.id+'" data-dr="'+(p.doutora||'')+'">'+escapeHtml(p.nome)+'</option>';
+    opts+='<option value="'+p.id+'" data-dr="'+(p.doutora||'')+'" data-valor="'+(p.valor_padrao!=null?p.valor_padrao:'')+'">'+escapeHtml(p.nome)+'</option>';
   }
   return '<p class="stt">Novo atendimento</p>'
     +'<div class="fg"><label>Paciente *</label><select id="at-pac">'+opts+'</select></div>'
@@ -1043,6 +1051,7 @@ function renderFormAtendimento(){
     +'<option value="neia"'+(defaultDr==='neia'?' selected':'')+'>Dra. Néia</option>'
     +'<option value="dany"'+(defaultDr==='dany'?' selected':'')+'>Dra. Dany</option>'
     +'</select></div>'
+    +'<div class="fg"><label>Valor da sessão (R$)</label><input type="number" id="at-val" step="0.01" min="0" placeholder="Ex: 160,00"></div>'
     +'<div class="fg"><label>Repetir</label><select id="at-rep">'
     +'<option value="nao">Não repetir</option>'
     +'<option value="semanal">Toda semana</option>'
@@ -1074,11 +1083,14 @@ async function salvarAtendimento(){
   var stepDias = rep==='quinzenal' ? 14 : 7;
   var n = rep==='nao' ? 1 : qtd;
   var sid = rep==='nao' ? null : uuidv4();
+  var valTxt=document.getElementById('at-val').value;
+  var valor = valTxt!=='' ? parseFloat(valTxt) : null;
+  if(valor!=null && (isNaN(valor)||valor<0)) valor=null;
   var rows=[];
   for(var i=0;i<n;i++){
     var occ=new Date(base.getTime());
     occ.setDate(occ.getDate()+stepDias*i);
-    rows.push({ paciente_id:parseInt(pid,10), doutora:dr, data_hora:occ.toISOString(), status:'agendado', observacao:obs, serie_id:sid });
+    rows.push({ paciente_id:parseInt(pid,10), doutora:dr, data_hora:occ.toISOString(), status:'agendado', observacao:obs, serie_id:sid, valor:valor });
   }
   var btn=document.getElementById('btn-at-salvar');
   if(btn){ btn.disabled=true; btn.textContent='Salvando…'; }
@@ -1320,6 +1332,9 @@ function bindApp(){
     var opt=e.target.options[e.target.selectedIndex];
     var dr=opt?opt.getAttribute('data-dr'):'';
     if(dr){ var sel=document.getElementById('at-dr'); if(sel) sel.value=dr; }
+    // Pré-preenche o valor com o valor_padrao do paciente (editável)
+    var vv=opt?opt.getAttribute('data-valor'):'';
+    var vi=document.getElementById('at-val'); if(vi && vv) vi.value=vv;
   });
   var atRep=document.getElementById('at-rep');
   if(atRep)atRep.addEventListener('change',function(e){
