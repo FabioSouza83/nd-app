@@ -767,15 +767,18 @@ function renderForm(){
   }
   html+='<div class="fg"><label>Descrição</label><input type="text" id="f-desc" placeholder="'+(f.tipo==='despesa'?'Ex: Material de limpeza':'Ex: Nome do paciente')+'" value="'+escapeHtml(f.desc)+'"></div>'
     +'<div class="fg"><label>Valor (R$)</label><input type="number" id="f-val" placeholder="0,00" value="'+f.valor+'" step="0.01" min="0"></div>';
-  if(sp){
-    html+='<div class="split"><p style="font-size:11px;font-weight:600;color:#856404;margin-bottom:8px">✂️ Divisão 50/50</p>'
-      +'<div class="sr"><span style="font-size:12px">Néia</span><span style="font-size:12px;font-weight:600">'+fmt(sp)+'</span></div>'
-      +'<div class="sr"><span style="font-size:12px">Dany</span><span style="font-size:12px;font-weight:600">'+fmt(sp)+'</span></div>'
-      +'</div>';
-  }
+  // Container atualizado cirurgicamente pelo handler do valor (sem re-render → não perde o foco ao digitar)
+  html+='<div id="split-wrap">'+(sp?splitHtml(sp):'')+'</div>';
   html+='<div class="fg" style="margin-top:14px"><label>Observação (opcional)</label><textarea id="f-obs" rows="2" style="resize:none">'+escapeHtml(f.obs)+'</textarea></div>'
     +'<button class="btn" id="btn-salvar" style="margin-top:8px">💾 Salvar Lançamento</button>';
   return html;
+}
+
+function splitHtml(sp){
+  return '<div class="split"><p style="font-size:11px;font-weight:600;color:#856404;margin-bottom:8px">✂️ Divisão 50/50</p>'
+    +'<div class="sr"><span style="font-size:12px">Néia</span><span style="font-size:12px;font-weight:600">'+fmt(sp)+'</span></div>'
+    +'<div class="sr"><span style="font-size:12px">Dany</span><span style="font-size:12px;font-weight:600">'+fmt(sp)+'</span></div>'
+    +'</div>';
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1564,7 +1567,13 @@ function bindApp(){
     (function(b){b.addEventListener('click',function(){S.form.flag=b.dataset.flag;render();});})(flags[f]);
   }
   var fv=document.getElementById('f-val');
-  if(fv)fv.addEventListener('input',function(e){S.form.valor=e.target.value;render();});
+  if(fv)fv.addEventListener('input',function(e){
+    S.form.valor=e.target.value;
+    // Atualiza só a Divisão 50/50, sem re-render (evita perder o foco/cursor ao digitar o valor)
+    var sp=(e.target.value && S.form.flag==='conjunta')?parseFloat(e.target.value)/2:null;
+    var w=document.getElementById('split-wrap');
+    if(w) w.innerHTML = sp ? splitHtml(sp) : '';
+  });
   var fd=document.getElementById('f-desc');
   if(fd)fd.addEventListener('input',function(e){S.form.desc=e.target.value;});
   var fc=document.getElementById('f-cat');
