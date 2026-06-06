@@ -275,6 +275,15 @@ html,body{height:100%;background:#E8E5DE;font-family:'DM Sans',sans-serif}
 .cx-verdict{margin-top:10px;border-radius:8px;padding:10px 12px;font-size:12px;font-weight:600;line-height:1.4}
 .cx-verdict.ok{background:rgba(31,92,31,.08);color:var(--green)}
 .cx-verdict.bad{background:#FDECEA;color:var(--red)}
+
+/* ── COMPRAS A PRAZO (parcelamentos) ── */
+.cp-sec{font-family:'DM Serif Display',serif;font-size:16px;color:var(--navy);margin:4px 0 10px}
+.cp-card{background:white;border-radius:var(--r2);padding:13px 15px;margin-bottom:8px;box-shadow:0 2px 8px rgba(27,42,74,.06);border-left:3px solid var(--amber)}
+.cp-top{display:flex;justify-content:space-between;align-items:center;gap:10px}
+.cp-desc{font-size:14px;font-weight:600;color:var(--navy)}
+.cp-total{font-family:'DM Serif Display',serif;font-size:15px;color:var(--navy);white-space:nowrap}
+.cp-meta{font-size:11px;color:var(--gray);margin-top:4px}
+.cp-prox{font-size:11px;color:var(--navy);margin-top:3px}
 </style>
 </head>
 <body>
@@ -1555,9 +1564,59 @@ function renderResTabela(meses){
     +'<p style="font-size:10px;color:var(--gray);margin-top:8px;text-align:center">Despesas, pró-labore e provisão exibidos como negativos (saídas). Mês em andamento incluído.</p>';
 }
 
+// ═══════════════════════════════════════════════════════════════
+// COMPRAS A PRAZO (parcelamentos) — agrupa parcelas pelo "(i/N)" da descrição
+// ═══════════════════════════════════════════════════════════════
+function fmtVenc(v){ if(!v) return '—'; var p=String(v).split('-'); return (p.length===3)?(p[2]+'/'+p[1]+'/'+p[0]):v; }
+function listarParcelamentos(){
+  var mesAtual=(S.MAIO && S.MAIO.mes_ref)?String(S.MAIO.mes_ref).slice(0,7):'';
+  var re=/^(.*?)\s*\((\d+)\/(\d+)\)\s*$/;  // captura "Descrição (i/N)"
+  var grupos={};
+  for(var i=0;i<S.LANC.length;i++){
+    var t=S.LANC[i];
+    if(t.origem==='extrato'||t.tipo!=='despesa') continue;
+    var m=re.exec(t.descricao||'');
+    if(!m) continue;
+    var base=m[1].trim(), n=parseInt(m[3],10), idx=parseInt(m[2],10);
+    var key=base+'|'+n;
+    if(!grupos[key]) grupos[key]={desc:base,n:n,parcelas:[]};
+    grupos[key].parcelas.push({i:idx,valor:Number(t.valor),venc:t.venc});
+  }
+  var arr=[];
+  for(var k in grupos){
+    var g=grupos[k];
+    g.parcelas.sort(function(a,b){return a.i-b.i});
+    var total=0,futuras=0,prox=null;
+    for(var p=0;p<g.parcelas.length;p++){
+      var pc=g.parcelas[p]; total+=pc.valor;
+      var vm=pc.venc?String(pc.venc).slice(0,7):null;
+      if(vm && mesAtual && vm>mesAtual){ futuras++; if(!prox) prox=pc; }
+    }
+    g.total=total; g.futuras=futuras; g.prox=prox;
+    arr.push(g);
+  }
+  arr.sort(function(a,b){return b.futuras-a.futuras});
+  return arr;
+}
+function renderCompraCard(g){
+  var proxTxt = (g.futuras>0 && g.prox) ? ('Próxima: <strong>'+fmtVenc(g.prox.venc)+'</strong> ('+fmt(g.prox.valor)+')') : '✅ Todas as parcelas já entraram no caixa';
+  return '<div class="cp-card">'
+    +'<div class="cp-top"><span class="cp-desc">🛒 '+escapeHtml(g.desc)+'</span><span class="cp-total">'+fmt(g.total)+'</span></div>'
+    +'<div class="cp-meta">'+g.n+'x · <strong>'+g.futuras+' a vencer</strong> · '+(g.n-g.futuras)+' de '+g.n+' já no caixa</div>'
+    +'<div class="cp-prox">'+proxTxt+'</div>'
+    +'</div>';
+}
+
 function renderAudit(){
   var sorted=S.LANC.slice().reverse();
   var html='<p class="stt">Trilha de Auditoria</p><p class="ssub">Movimentações do extrato e lançamentos manuais</p>';
+  // Compras a prazo (parcelamentos) no topo
+  var parcs=listarParcelamentos();
+  if(parcs.length){
+    html+='<div class="cp-sec">🛒 Compras a prazo</div>';
+    for(var c=0;c<parcs.length;c++) html+=renderCompraCard(parcs[c]);
+    html+='<p class="stt" style="font-size:16px;margin-top:18px">Lançamentos</p>';
+  }
   if(sorted.length===0){
     html+='<div class="empty"><div style="font-size:36px;opacity:.3;margin-bottom:10px">🔍</div><p>Nenhum registro ainda</p></div>';
   }else{
