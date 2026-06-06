@@ -184,6 +184,34 @@ html,body{height:100%;background:#E8E5DE;font-family:'DM Sans',sans-serif}
 .empty{text-align:center;padding:40px 20px;color:var(--gray)}
 .toast{position:fixed;top:20px;left:50%;transform:translateX(-50%);background:var(--navy);color:white;padding:13px 22px;border-radius:30px;font-size:13px;font-weight:500;z-index:9999}
 .toast.err{background:var(--red)}
+
+/* ── ATENDIMENTOS (Onda 2.A) ── */
+.at-week{display:flex;align-items:center;justify-content:space-between;gap:10px;background:white;border-radius:var(--r2);padding:8px 10px;margin-bottom:12px;box-shadow:0 2px 8px rgba(27,42,74,.06)}
+.at-wnav{background:var(--cream);border:1.5px solid #E0DDD6;border-radius:10px;padding:6px 13px;cursor:pointer;font-size:14px;color:var(--navy);flex-shrink:0}
+.at-wlbl{font-size:13px;font-weight:700;color:var(--navy);text-align:center}
+.at-wsub{font-size:10px;color:var(--gray);text-align:center;margin-top:1px}
+.at-day{margin-bottom:16px}
+.at-day-tt{font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.8px;margin:0 0 8px 4px}
+.at-day-empty{font-size:12px;color:#BBB;padding:2px 4px 6px;font-style:italic}
+.at-card{background:white;border-radius:var(--r2);padding:11px 13px;margin-bottom:8px;box-shadow:0 2px 8px rgba(27,42,74,.06);border-left:3px solid #E0DDD6}
+.at-card.neia{border-left-color:var(--neia-d)}
+.at-card.dany{border-left-color:var(--dany-d)}
+.at-top{display:flex;align-items:center;gap:9px}
+.at-hora{font-family:'DM Serif Display',serif;font-size:15px;color:var(--navy);min-width:46px}
+.at-nome{font-size:13px;font-weight:600;color:var(--navy);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.at-del{background:none;border:none;cursor:pointer;font-size:13px;opacity:.55;flex-shrink:0;padding:0 2px}
+.at-del:hover{opacity:1}
+.at-actions{display:flex;gap:5px;overflow-x:auto;margin-top:9px;padding-bottom:2px}
+.at-actions::-webkit-scrollbar{display:none}
+.at-act{background:white;border:1px solid #E0DDD6;border-radius:20px;padding:4px 10px;font-size:10px;font-weight:600;color:var(--navy);cursor:pointer;white-space:nowrap;flex-shrink:0}
+.at-act.on{background:var(--navy);color:white;border-color:var(--navy)}
+.at-chip{display:inline-flex;align-items:center;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:600;white-space:nowrap;flex-shrink:0}
+.at-agendado{background:rgba(232,160,32,.15);color:#7D5A00}
+.at-realizado{background:rgba(31,92,31,.12);color:var(--green)}
+.at-falta_faturada{background:var(--prov);color:#9C4221}
+.at-falta_nao_faturada{background:#E8E5DE;color:#6B6B6B}
+.at-remarcado{background:var(--neia);color:var(--neia-d)}
+.at-cancelado{background:#FEE;color:var(--red)}
 </style>
 </head>
 <body>
@@ -242,7 +270,11 @@ var S = {
   META: null,
   MAIO: null,
   HIST: [],
-  LANC: []
+  LANC: [],
+  ATEND: [],
+  // Atendimentos (Onda 2.A)
+  semOffset: 0,   // deslocamento de semanas na visão de Atendimentos
+  atView: null    // 'form' quando o formulário de novo atendimento está aberto
 };
 
 // ═══════════════════════════════════════════════════════════════
@@ -275,12 +307,13 @@ function showToast(msg, isErr){
 // ═══════════════════════════════════════════════════════════════
 async function carregarDados(){
   try {
-    var [meta, saldos, hist, lanc, pac] = await Promise.all([
+    var [meta, saldos, hist, lanc, pac, atend] = await Promise.all([
       sb.from('nd_meta').select('*').eq('id',1).single(),
       sb.from('nd_saldos_mes').select('*').eq('id',1).single(),
       sb.from('nd_historico').select('*').order('ordem',{ascending:true}),
       sb.from('nd_lancamentos').select('*').order('created_at',{ascending:true}),
-      sb.from('nd_pacientes').select('*').eq('excluido', false).order('nome',{ascending:true})
+      sb.from('nd_pacientes').select('*').eq('excluido', false).order('nome',{ascending:true}),
+      sb.from('nd_atendimentos').select('*').eq('excluido', false).order('data_hora',{ascending:true})
     ]);
 
     if(meta.error) throw new Error('meta: '+meta.error.message);
@@ -288,12 +321,14 @@ async function carregarDados(){
     if(hist.error) throw new Error('hist: '+hist.error.message);
     if(lanc.error) throw new Error('lanc: '+lanc.error.message);
     if(pac.error) throw new Error('pacientes: '+pac.error.message);
+    if(atend.error) throw new Error('atendimentos: '+atend.error.message);
 
     S.META = meta.data;
     S.MAIO = saldos.data;
     S.HIST = hist.data;
     S.LANC = lanc.data;
     S.PACIENTES = pac.data || [];
+    S.ATEND = atend.data || [];
     S.ready = true;
     return true;
   } catch(e){
@@ -378,6 +413,7 @@ function renderApp(){
     {id:'dashboard',icon:'📊',label:'Painel'},
     {id:'historico',icon:'📅',label:'Histórico'},
     {id:'pacientes',icon:'👥',label:'Pacientes'},
+    {id:'atendimentos',icon:'🗓️',label:'Atend.'},
     {id:'lancamento',icon:'➕',label:'Lançar'},
     {id:'auditoria',icon:'🔍',label:'Trilha'}
   ];
@@ -387,6 +423,9 @@ function renderApp(){
   else if(S.tab==='historico')content=renderHist();
   else if(S.tab==='pacientes'){
     content = (S.view==='pacForm') ? renderFormPaciente() : renderPacientes();
+  }
+  else if(S.tab==='atendimentos'){
+    content = (S.atView==='form') ? renderFormAtendimento() : renderAtendimentos();
   }
   else if(S.tab==='lancamento')content=renderForm();
   else if(S.tab==='auditoria')content=renderAudit();
@@ -882,6 +921,181 @@ async function excluirPaciente(){
   }
 }
 
+// ═══════════════════════════════════════════════════════════════
+// ATENDIMENTOS — Onda 2.A
+// ═══════════════════════════════════════════════════════════════
+var ATEND_STATUS=[
+  {id:'agendado',l:'Agendado'},
+  {id:'realizado',l:'Realizado'},
+  {id:'falta_faturada',l:'Falta (fat.)'},
+  {id:'falta_nao_faturada',l:'Falta (s/ fat.)'},
+  {id:'remarcado',l:'Remarcado'},
+  {id:'cancelado',l:'Cancelado'}
+];
+function statusAtendLabel(s){
+  for(var i=0;i<ATEND_STATUS.length;i++) if(ATEND_STATUS[i].id===s) return ATEND_STATUS[i].l;
+  return s;
+}
+function statusAtendClass(s){ return 'at-'+s; }
+function drLabel(d){ return d==='dany' ? 'Dra. Dany' : 'Dra. Néia'; }
+function pad2(n){ return ('0'+n).slice(-2); }
+// data_hora é timestamptz (UTC). new Date(iso) volta para o fuso local → hora/dia corretos. Sem parse de string ano-mês.
+function fmtHora(iso){ var d=new Date(iso); return pad2(d.getHours())+':'+pad2(d.getMinutes()); }
+function pacNome(id){
+  for(var i=0;i<S.PACIENTES.length;i++) if(S.PACIENTES[i].id===id) return S.PACIENTES[i].nome;
+  return '(paciente removido)';
+}
+// Domingo (00:00 local) da semana atual, deslocado por 'offset' semanas. Convenção do app: semana Dom→Sex.
+function inicioSemana(offset){
+  var n=new Date();
+  var d=new Date(n.getFullYear(), n.getMonth(), n.getDate());
+  d.setDate(d.getDate() - d.getDay() + offset*7);
+  return d;
+}
+var DIAS_SEM=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta'];
+
+function renderAtendimentos(){
+  var ws=inicioSemana(S.semOffset);
+  var fim=new Date(ws.getFullYear(),ws.getMonth(),ws.getDate()); fim.setDate(fim.getDate()+5); // Sexta
+
+  // Agrupa atendimentos da semana (Domingo a Sexta) por dia
+  var dias=[[],[],[],[],[],[]];
+  for(var i=0;i<S.ATEND.length;i++){
+    var a=S.ATEND[i];
+    var d=new Date(a.data_hora);
+    var dMid=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+    var diff=Math.round((dMid-ws)/86400000);
+    if(diff>=0 && diff<=5) dias[diff].push(a);
+  }
+  var total=0;
+  for(var z=0;z<6;z++){ total+=dias[z].length; dias[z].sort(function(x,y){return new Date(x.data_hora)-new Date(y.data_hora)}); }
+
+  var lblIni=pad2(ws.getDate())+'/'+pad2(ws.getMonth()+1);
+  var lblFim=pad2(fim.getDate())+'/'+pad2(fim.getMonth()+1);
+  var sub = S.semOffset===0 ? 'Esta semana' : (S.semOffset<0 ? 'Semana anterior' : 'Próxima semana');
+
+  var html='<p class="stt">Atendimentos</p>'
+    +'<div class="at-week">'
+    +'<button class="at-wnav" id="btn-sem-prev">◀</button>'
+    +'<div><div class="at-wlbl">'+lblIni+' – '+lblFim+'</div><div class="at-wsub">'+sub+' · '+total+' atend.</div></div>'
+    +'<button class="at-wnav" id="btn-sem-next">▶</button>'
+    +'</div>'
+    +'<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">'
+    +(S.semOffset!==0?'<button class="pac-fbtn" id="btn-sem-hoje">Esta semana</button>':'')
+    +'<button class="pac-add" id="btn-at-add" style="margin-left:auto">+ Novo</button>'
+    +'</div>';
+
+  for(var k=0;k<6;k++){
+    var dd=new Date(ws.getFullYear(),ws.getMonth(),ws.getDate()); dd.setDate(dd.getDate()+k);
+    html+='<div class="at-day"><p class="at-day-tt">'+DIAS_SEM[k]+' · '+pad2(dd.getDate())+'/'+pad2(dd.getMonth()+1)+'</p>';
+    if(dias[k].length===0){
+      html+='<div class="at-day-empty">Sem atendimentos</div>';
+    } else {
+      for(var j=0;j<dias[k].length;j++) html+=renderAtendCard(dias[k][j]);
+    }
+    html+='</div>';
+  }
+  return html;
+}
+
+function renderAtendCard(a){
+  var dr=a.doutora||'neia';
+  var drColor=dr==='dany'?'color:var(--dany-d)':'color:var(--neia-d)';
+  var acts='';
+  for(var i=0;i<ATEND_STATUS.length;i++){
+    var st=ATEND_STATUS[i];
+    acts+='<button class="at-act'+(a.status===st.id?' on':'')+'" data-at-st="'+st.id+'" data-at-id="'+a.id+'">'+st.l+'</button>';
+  }
+  return '<div class="at-card '+dr+'">'
+    +'<div class="at-top">'
+    +'<span class="at-hora">'+fmtHora(a.data_hora)+'</span>'
+    +'<span class="at-nome">'+escapeHtml(pacNome(a.paciente_id))+'</span>'
+    +'<span class="at-chip '+statusAtendClass(a.status)+'">'+statusAtendLabel(a.status)+'</span>'
+    +'<button class="at-del" data-at-del="'+a.id+'" title="Remover">🗑️</button>'
+    +'</div>'
+    +'<div style="font-size:11px;font-weight:600;margin-top:3px;'+drColor+'">'+drLabel(dr)+'</div>'
+    +'<div class="at-actions">'+acts+'</div>'
+    +'</div>';
+}
+
+function renderFormAtendimento(){
+  var defaultDr = S.user.role==='dany' ? 'dany' : 'neia';
+  var opts='<option value="">Selecione o paciente…</option>';
+  for(var i=0;i<S.PACIENTES.length;i++){
+    var p=S.PACIENTES[i];
+    opts+='<option value="'+p.id+'" data-dr="'+(p.doutora||'')+'">'+escapeHtml(p.nome)+'</option>';
+  }
+  return '<p class="stt">Novo atendimento</p>'
+    +'<div class="fg"><label>Paciente *</label><select id="at-pac">'+opts+'</select></div>'
+    +'<div class="fg"><label>Data e hora *</label><input type="datetime-local" id="at-dt"></div>'
+    +'<div class="fg"><label>Doutora</label><select id="at-dr">'
+    +'<option value="neia"'+(defaultDr==='neia'?' selected':'')+'>Dra. Néia</option>'
+    +'<option value="dany"'+(defaultDr==='dany'?' selected':'')+'>Dra. Dany</option>'
+    +'</select></div>'
+    +'<div class="fg"><label>Observação (opcional)</label><textarea id="at-obs" rows="2" style="resize:none"></textarea></div>'
+    +'<div class="pf-actions">'
+    +'<button class="btn btn-sec" id="btn-at-cancelar">Cancelar</button>'
+    +'<button class="btn" id="btn-at-salvar">Salvar</button>'
+    +'</div>';
+}
+
+async function salvarAtendimento(){
+  var pid=document.getElementById('at-pac').value;
+  var dt=document.getElementById('at-dt').value;
+  var dr=document.getElementById('at-dr').value;
+  var obs=(document.getElementById('at-obs').value||'').trim()||null;
+  if(!pid){ showToast('Selecione o paciente.',true); return; }
+  if(!dt){ showToast('Informe data e hora.',true); return; }
+  // dt = 'YYYY-MM-DDTHH:MM' (hora local). new Date() interpreta como local; toISOString() grava em UTC. Correto.
+  var iso=new Date(dt).toISOString();
+  var btn=document.getElementById('btn-at-salvar');
+  if(btn){ btn.disabled=true; btn.textContent='Salvando…'; }
+  var registro={ paciente_id:parseInt(pid,10), doutora:dr, data_hora:iso, status:'agendado', observacao:obs };
+  try{
+    var res=await sb.from('nd_atendimentos').insert(registro).select().single();
+    if(res.error) throw new Error(res.error.message);
+    S.ATEND.push(res.data);
+    S.atView=null;
+    showToast('Atendimento agendado.');
+    render();
+  }catch(e){
+    console.error('Erro salvar atendimento:',e);
+    showToast('Erro: '+e.message,true);
+    if(btn){ btn.disabled=false; btn.textContent='Salvar'; }
+  }
+}
+
+async function mudarStatusAtendimento(id,status){
+  try{
+    var res=await sb.from('nd_atendimentos').update({status:status}).eq('id',id).select().single();
+    if(res.error) throw new Error(res.error.message);
+    for(var i=0;i<S.ATEND.length;i++) if(S.ATEND[i].id===id){ S.ATEND[i]=res.data; break; }
+    showToast('Status: '+statusAtendLabel(status));
+    render();
+  }catch(e){
+    console.error('Erro status atendimento:',e);
+    showToast('Erro: '+e.message,true);
+  }
+}
+
+async function excluirAtendimento(id){
+  if(!confirm('Remover este atendimento?\n\nO registro é preservado (soft-delete) e pode ser recuperado pelo Fábio.')) return;
+  try{
+    var res=await sb.from('nd_atendimentos').update({
+      excluido:true,
+      excluido_em:new Date().toISOString(),
+      excluido_por:S.user.email
+    }).eq('id',id);
+    if(res.error) throw new Error(res.error.message);
+    S.ATEND=S.ATEND.filter(function(a){return a.id!==id});
+    showToast('Atendimento removido.');
+    render();
+  }catch(e){
+    console.error('Erro remover atendimento:',e);
+    showToast('Erro: '+e.message,true);
+  }
+}
+
 function renderAudit(){
   var sorted=S.LANC.slice().reverse();
   var html='<p class="stt">Trilha de Auditoria</p><p class="ssub">Movimentações do extrato e lançamentos manuais</p>';
@@ -949,6 +1163,8 @@ function bindApp(){
       S.tab=b.dataset.tab;
       S.view=null;
       S.pacForm=null;
+      S.atView=null;
+      S.semOffset=0;
       render();
     });})(navItems[i]);
   }
@@ -1040,6 +1256,39 @@ function bindApp(){
     S.view=null;
     render();
   });
+
+  // ── Atendimentos (Onda 2.A) ──
+  var btnAtAdd=document.getElementById('btn-at-add');
+  if(btnAtAdd)btnAtAdd.addEventListener('click',function(){ S.atView='form'; render(); });
+  var btnAtCancelar=document.getElementById('btn-at-cancelar');
+  if(btnAtCancelar)btnAtCancelar.addEventListener('click',function(){ S.atView=null; render(); });
+  var btnAtSalvar=document.getElementById('btn-at-salvar');
+  if(btnAtSalvar)btnAtSalvar.addEventListener('click',salvarAtendimento);
+  var atPac=document.getElementById('at-pac');
+  if(atPac)atPac.addEventListener('change',function(e){
+    // Pré-preenche a doutora com a do paciente (mas o usuário pode trocar depois)
+    var opt=e.target.options[e.target.selectedIndex];
+    var dr=opt?opt.getAttribute('data-dr'):'';
+    if(dr){ var sel=document.getElementById('at-dr'); if(sel) sel.value=dr; }
+  });
+  var btnSemPrev=document.getElementById('btn-sem-prev');
+  if(btnSemPrev)btnSemPrev.addEventListener('click',function(){ S.semOffset--; render(); });
+  var btnSemNext=document.getElementById('btn-sem-next');
+  if(btnSemNext)btnSemNext.addEventListener('click',function(){ S.semOffset++; render(); });
+  var btnSemHoje=document.getElementById('btn-sem-hoje');
+  if(btnSemHoje)btnSemHoje.addEventListener('click',function(){ S.semOffset=0; render(); });
+  var atSts=document.querySelectorAll('[data-at-st]');
+  for(var as=0;as<atSts.length;as++){
+    (function(b){b.addEventListener('click',function(){
+      mudarStatusAtendimento(parseInt(b.dataset.atId,10), b.dataset.atSt);
+    });})(atSts[as]);
+  }
+  var atDels=document.querySelectorAll('[data-at-del]');
+  for(var ad=0;ad<atDels.length;ad++){
+    (function(b){b.addEventListener('click',function(){
+      excluirAtendimento(parseInt(b.dataset.atDel,10));
+    });})(atDels[ad]);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1088,7 +1337,8 @@ async function sair(){
   S.user = null;
   S.ready = false;
   S.tab = 'dashboard';
-  S.META = null; S.MAIO = null; S.HIST = []; S.LANC = []; S.PACIENTES = [];
+  S.META = null; S.MAIO = null; S.HIST = []; S.LANC = []; S.PACIENTES = []; S.ATEND = [];
+  S.semOffset = 0; S.atView = null;
   render();
 }
 
