@@ -214,6 +214,42 @@ html,body{height:100%;background:#E8E5DE;font-family:'DM Sans',sans-serif}
 .at-falta_nao_faturada{background:#E8E5DE;color:#6B6B6B}
 .at-remarcado{background:var(--neia);color:var(--neia-d)}
 .at-cancelado{background:#FEE;color:var(--red)}
+
+/* ── RESULTADOS (painel anual) ── */
+.res-kpis{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.res-kpi{background:white;border-radius:var(--r2);padding:13px 14px;box-shadow:0 2px 12px rgba(27,42,74,.08)}
+.res-kpi-l{font-size:10px;font-weight:600;text-transform:uppercase;letter-spacing:.5px;color:var(--gray)}
+.res-kpi-v{font-family:'DM Serif Display',serif;font-size:19px;margin-top:4px;line-height:1}
+.res-card{background:white;border-radius:var(--r);padding:16px;box-shadow:0 2px 12px rgba(27,42,74,.08);margin-bottom:12px}
+.res-card-tt{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--gray);margin-bottom:12px}
+.res-chart{display:flex;gap:6px;overflow-x:auto;padding-bottom:4px}
+.res-chart::-webkit-scrollbar{display:none}
+.res-col{flex-shrink:0;width:46px;text-align:center}
+.res-bw{height:92px;display:flex;flex-direction:column;justify-content:flex-end;align-items:center}
+.res-bar{width:22px;border-radius:4px 4px 0 0;display:flex;flex-direction:column;justify-content:flex-end;overflow:hidden;min-height:2px}
+.res-seg-n{background:var(--neia-d);width:22px}
+.res-seg-d{background:var(--dany-d);width:22px}
+.res-bar-pos{background:var(--green)}
+.res-bar-neg{background:var(--red)}
+.res-col-m{font-size:9px;font-weight:600;text-transform:uppercase;color:var(--gray);margin-top:5px}
+.res-col-v{font-size:9px;color:var(--navy);margin-top:2px;font-weight:600}
+.res-legend{display:flex;gap:16px;justify-content:center;margin-top:10px;font-size:11px;color:var(--gray)}
+.res-legend span{display:inline-flex;align-items:center;gap:5px}
+.res-dot{width:10px;height:10px;border-radius:2px;display:inline-block}
+.res-tablewrap{overflow-x:auto;background:white;border-radius:var(--r);box-shadow:0 2px 12px rgba(27,42,74,.08);padding:2px}
+.res-tablewrap::-webkit-scrollbar{height:6px}
+.res-table{border-collapse:collapse;font-size:10px;white-space:nowrap}
+.res-table th,.res-table td{padding:6px 9px;text-align:right}
+.res-table thead th{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--gray);border-bottom:1.5px solid #E8E5DE;background:white}
+.res-desc{position:sticky;left:0;background:white;text-align:left !important;font-weight:600;color:var(--navy);z-index:1}
+.res-table thead .res-desc{z-index:2}
+.res-sec td{background:var(--navy);color:var(--amber);font-weight:700;font-size:9px;text-transform:uppercase;letter-spacing:.6px;text-align:left}
+.res-tot td{font-weight:700;border-top:1px solid #E8E5DE;background:#FAF8F4}
+.res-tot .res-desc{background:#FAF8F4}
+.res-totcol{border-left:1.5px solid #E8E5DE;font-weight:700;background:#FAF8F4}
+.res-pos{color:var(--green)}
+.res-neg{color:var(--red)}
+.res-zero,.res-mut{color:#BBB}
 </style>
 </head>
 <body>
@@ -414,6 +450,7 @@ function renderApp(){
   var tabs=[
     {id:'dashboard',icon:'📊',label:'Painel'},
     {id:'historico',icon:'📅',label:'Histórico'},
+    {id:'resultados',icon:'📈',label:'Result.'},
     {id:'pacientes',icon:'👥',label:'Pacientes'},
     {id:'atendimentos',icon:'🗓️',label:'Atend.'},
     {id:'lancamento',icon:'➕',label:'Lançar'},
@@ -423,6 +460,7 @@ function renderApp(){
   var content='';
   if(S.tab==='dashboard')content=renderDash();
   else if(S.tab==='historico')content=renderHist();
+  else if(S.tab==='resultados')content=renderResultados();
   else if(S.tab==='pacientes'){
     content = (S.view==='pacForm') ? renderFormPaciente() : renderPacientes();
   }
@@ -1156,6 +1194,151 @@ async function excluirSerie(serieId, fromIso){
     console.error('Erro remover série:',e);
     showToast('Erro: '+e.message,true);
   }
+}
+
+// ═══════════════════════════════════════════════════════════════
+// RESULTADOS — Painel anual (réplica do DASHBOARD do Excel)
+// ═══════════════════════════════════════════════════════════════
+function miniK(v){
+  var a=Math.abs(v);
+  if(a>=1000) return (v/1000).toFixed(1).replace('.',',')+'k';
+  return ''+Math.round(v);
+}
+function montaMesesAno(){
+  // Monta os 12 meses do ano a partir de nd_historico (fechados) + nd_saldos_mes (em andamento)
+  var meses=[];
+  for(var i=0;i<12;i++) meses.push({m:i+1,nome:MESES[i],has:false,rec_n:0,rec_d:0,desp_n:0,desp_d:0,plab_n:0,plab_d:0,prov_n:0,prov_d:0,res_n:0,res_d:0});
+  for(var h=0;h<S.HIST.length;h++){
+    var r=S.HIST[h]; var idx=parseInt(r.mes_key,10)-1;
+    if(idx>=0&&idx<12){
+      var mo=meses[idx]; mo.has=true;
+      mo.rec_n=Number(r.rec_n); mo.rec_d=Number(r.rec_d);
+      mo.desp_n=Number(r.desp_n); mo.desp_d=Number(r.desp_d);
+      mo.plab_n=Number(r.plab_n); mo.plab_d=Number(r.plab_d);
+      mo.prov_n=Number(r.prov_n); mo.prov_d=Number(r.prov_d);
+      mo.res_n=Number(r.res_n); mo.res_d=Number(r.res_d);
+    }
+  }
+  if(S.MAIO && S.MAIO.mes_ref){
+    var cm=parseInt(S.MAIO.mes_ref.split('-')[1],10)-1;
+    if(cm>=0&&cm<12){
+      var M=S.MAIO; var mo2=meses[cm]; mo2.has=true;
+      mo2.rec_n=Number(M.rec_n); mo2.rec_d=Number(M.rec_d);
+      mo2.desp_n=Number(M.desp_n); mo2.desp_d=Number(M.desp_d);
+      mo2.plab_n=Number(M.plab_n); mo2.plab_d=Number(M.plab_d);
+      mo2.prov_n=Number(M.prov_n); mo2.prov_d=Number(M.prov_d);
+      // Resultado do mês em andamento = receita − despesa − pró-labore − provisão (mesma fórmula do histórico)
+      mo2.res_n=mo2.rec_n-mo2.desp_n-mo2.plab_n-mo2.prov_n;
+      mo2.res_d=mo2.rec_d-mo2.desp_d-mo2.plab_d-mo2.prov_d;
+    }
+  }
+  return meses;
+}
+
+function renderResultados(){
+  var ano = (S.MAIO && S.MAIO.mes_ref) ? S.MAIO.mes_ref.split('-')[0] : '2026';
+  var meses=montaMesesAno();
+
+  // Totais do ano
+  var T={rec:0,desp:0,plab:0,prov:0,res:0};
+  for(var t=0;t<12;t++){ var mo=meses[t]; if(!mo.has) continue;
+    T.rec+=mo.rec_n+mo.rec_d; T.desp+=mo.desp_n+mo.desp_d; T.plab+=mo.plab_n+mo.plab_d; T.prov+=mo.prov_n+mo.prov_d; T.res+=mo.res_n+mo.res_d;
+  }
+
+  var html='<p class="stt">Resultados '+ano+'</p><p class="ssub">Consolidado do ano · valores em R$</p>';
+
+  // KPIs
+  html+='<div class="res-kpis">'
+    +'<div class="res-kpi"><div class="res-kpi-l">Receita bruta</div><div class="res-kpi-v res-pos">'+fmt(T.rec)+'</div></div>'
+    +'<div class="res-kpi"><div class="res-kpi-l">Despesas</div><div class="res-kpi-v res-neg">'+fmt(T.desp)+'</div></div>'
+    +'<div class="res-kpi"><div class="res-kpi-l">Pró-labore</div><div class="res-kpi-v res-neg">'+fmt(T.plab)+'</div></div>'
+    +'<div class="res-kpi"><div class="res-kpi-l">Resultado</div><div class="res-kpi-v '+(T.res>=0?'res-pos':'res-neg')+'">'+fmt(T.res)+'</div></div>'
+    +'</div>';
+
+  // Gráfico A: Receita por mês (Néia + Dany empilhado)
+  var maxRec=1;
+  for(var a=0;a<12;a++){ var s=meses[a].rec_n+meses[a].rec_d; if(s>maxRec)maxRec=s; }
+  var barsA='';
+  for(var b=0;b<12;b++){ var m=meses[b]; var tot=m.rec_n+m.rec_d;
+    if(m.has && tot>0){
+      var bh=Math.round(tot/maxRec*90);
+      var hn=Math.round(m.rec_n/tot*bh); var hd=bh-hn;
+      barsA+='<div class="res-col"><div class="res-bw"><div class="res-bar" style="height:'+bh+'px">'
+        +'<div class="res-seg-d" style="height:'+hd+'px"></div><div class="res-seg-n" style="height:'+hn+'px"></div>'
+        +'</div></div><div class="res-col-m">'+m.nome+'</div><div class="res-col-v">'+miniK(tot)+'</div></div>';
+    } else {
+      barsA+='<div class="res-col"><div class="res-bw"><div style="width:22px;height:2px;background:#E8E5DE"></div></div><div class="res-col-m">'+m.nome+'</div><div class="res-col-v" style="color:#ccc">—</div></div>';
+    }
+  }
+  html+='<div class="res-card"><div class="res-card-tt">Receita por mês</div>'
+    +'<div class="res-chart">'+barsA+'</div>'
+    +'<div class="res-legend"><span><span class="res-dot" style="background:var(--neia-d)"></span>Néia</span><span><span class="res-dot" style="background:var(--dany-d)"></span>Dany</span></div>'
+    +'</div>';
+
+  // Gráfico B: Resultado líquido por mês (verde/vermelho)
+  var maxAbs=1;
+  for(var c=0;c<12;c++){ if(meses[c].has){ var rr=Math.abs(meses[c].res_n+meses[c].res_d); if(rr>maxAbs)maxAbs=rr; } }
+  var barsB='';
+  for(var e=0;e<12;e++){ var m2=meses[e];
+    if(m2.has){
+      var rv=m2.res_n+m2.res_d; var bh2=Math.max(2,Math.round(Math.abs(rv)/maxAbs*84));
+      barsB+='<div class="res-col"><div class="res-bw"><div class="'+(rv>=0?'res-bar-pos':'res-bar-neg')+'" style="width:22px;height:'+bh2+'px;border-radius:4px 4px 0 0"></div></div><div class="res-col-m">'+m2.nome+'</div><div class="res-col-v '+(rv>=0?'res-pos':'res-neg')+'">'+miniK(rv)+'</div></div>';
+    } else {
+      barsB+='<div class="res-col"><div class="res-bw"><div style="width:22px;height:2px;background:#E8E5DE"></div></div><div class="res-col-m">'+m2.nome+'</div><div class="res-col-v" style="color:#ccc">—</div></div>';
+    }
+  }
+  html+='<div class="res-card"><div class="res-card-tt">Resultado líquido por mês</div>'
+    +'<div class="res-chart">'+barsB+'</div></div>';
+
+  // Tabela anual completa
+  html+=renderResTabela(meses);
+  return html;
+}
+
+function renderResTabela(meses){
+  function fmtCell(v){
+    if(v===0) return '<span class="res-zero">0</span>';
+    var cls=v>0?'res-pos':'res-neg';
+    var txt=v<0?'('+Math.round(Math.abs(v)).toLocaleString('pt-BR')+')':Math.round(v).toLocaleString('pt-BR');
+    return '<span class="'+cls+'">'+txt+'</span>';
+  }
+  function row(label,get,cls){
+    var cells=''; var tot=0;
+    for(var i=0;i<12;i++){ var mo=meses[i];
+      if(mo.has){ var v=get(mo); tot+=v; cells+='<td>'+fmtCell(v)+'</td>'; }
+      else { cells+='<td><span class="res-mut">—</span></td>'; }
+    }
+    cells+='<td class="res-totcol">'+fmtCell(tot)+'</td>';
+    return '<tr'+(cls?' class="'+cls+'"':'')+'><td class="res-desc">'+label+'</td>'+cells+'</tr>';
+  }
+  function sec(t){ return '<tr class="res-sec"><td colspan="14">'+t+'</td></tr>'; }
+  var head='<tr><th class="res-desc">Descrição</th>';
+  for(var i=0;i<12;i++) head+='<th>'+meses[i].nome+'</th>';
+  head+='<th class="res-totcol">Total</th></tr>';
+  var body=''
+    +sec('Receitas')
+    +row('Néia',function(m){return m.rec_n;})
+    +row('Dany',function(m){return m.rec_d;})
+    +row('Total',function(m){return m.rec_n+m.rec_d;},'res-tot')
+    +sec('Despesas operacionais')
+    +row('Néia',function(m){return -m.desp_n;})
+    +row('Dany',function(m){return -m.desp_d;})
+    +row('Total',function(m){return -(m.desp_n+m.desp_d);},'res-tot')
+    +sec('Pró-labore (retiradas)')
+    +row('Néia',function(m){return -m.plab_n;})
+    +row('Dany',function(m){return -m.plab_d;})
+    +row('Total',function(m){return -(m.plab_n+m.plab_d);},'res-tot')
+    +sec('Provisão encargos')
+    +row('Néia',function(m){return -m.prov_n;})
+    +row('Dany',function(m){return -m.prov_d;})
+    +row('Total',function(m){return -(m.prov_n+m.prov_d);},'res-tot')
+    +sec('Resultado líquido')
+    +row('Néia',function(m){return m.res_n;})
+    +row('Dany',function(m){return m.res_d;})
+    +row('Total',function(m){return m.res_n+m.res_d;},'res-tot');
+  return '<div class="res-card-tt" style="margin:8px 0 8px 2px">Tabela anual (R$, arredondado)</div>'
+    +'<div class="res-tablewrap"><table class="res-table"><thead>'+head+'</thead><tbody>'+body+'</tbody></table></div>'
+    +'<p style="font-size:10px;color:var(--gray);margin-top:8px;text-align:center">Despesas, pró-labore e provisão exibidos como negativos (saídas). Mês em andamento incluído.</p>';
 }
 
 function renderAudit(){
