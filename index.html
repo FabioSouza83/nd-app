@@ -431,7 +431,8 @@ function calcDisp(){
   var M=S.MAIO;
   return {
     neia: Number(M.ant_n)+Number(M.rec_n)+rn-Number(M.desp_n)-dn-Number(M.plab_n)-Number(M.prov_n),
-    dany: Number(M.ant_d)+Number(M.rec_d)+rd-Number(M.desp_d)-dd-Number(M.plab_d)-Number(M.prov_d)
+    dany: Number(M.ant_d)+Number(M.rec_d)+rd-Number(M.desp_d)-dd-Number(M.plab_d)-Number(M.prov_d),
+    rn:rn, rd:rd, dn:dn, dd:dd  // manuais: receitas/despesas por sócia (p/ detalhar no card)
   };
 }
 
@@ -523,16 +524,18 @@ function renderDash(){
   var d=calcDisp();
   var M=S.MAIO;
 
-  var sCard=function(name,cls,ant,rec,desp,plab,prov,disp_val){
+  var sCard=function(name,cls,ant,rec,desp,compras,plab,prov,disp_val){
     var isLow=disp_val<=0;
     var dispTxt=isLow?'R$\u00A00,00':fmt(disp_val);
     var alertTxt=isLow?'<div class="sc-alert">Aguardando próximas receitas</div>':'';
+    var comprasLine=compras>0?'<div class="sc-line"><span class="sc-line-l">(–) Compras lançadas</span><span class="sc-line-v">('+fmt(compras)+')</span></div>':'';
     var plabLine=plab>0?'<div class="sc-line"><span class="sc-line-l">(–) Pró-labore</span><span class="sc-line-v">('+fmt(plab)+')</span></div>':'';
     return '<div class="sc '+cls+'">'
       +'<div class="sc-name '+cls+'">'+name+'</div>'
       +'<div class="sc-line"><span class="sc-line-l">Saldo anterior</span><span class="sc-line-v">'+fmt(ant)+'</span></div>'
       +'<div class="sc-line"><span class="sc-line-l">+ Receitas mês</span><span class="sc-line-v">'+fmt(rec)+'</span></div>'
       +'<div class="sc-line"><span class="sc-line-l">(–) Despesas operac.</span><span class="sc-line-v">('+fmt(desp)+')</span></div>'
+      +comprasLine
       +plabLine
       +'<div class="sc-line"><span class="sc-line-l">(–) Provisão</span><span class="sc-line-v">('+fmt(prov)+')</span></div>'
       +'<div class="sc-disp"><span class="sc-disp-l">Disponível agora</span><span class="sc-disp-v">'+dispTxt+'</span></div>'
@@ -577,8 +580,8 @@ function renderDash(){
     +'<div class="hero">'
     +'<div class="hero-label">Disponível para retirada — '+fmtMesRef(S.MAIO.mes_ref)+'</div>'
     +'<div class="scards">'
-    +sCard('Néia','neia',Number(M.ant_n),Number(M.rec_n),Number(M.desp_n),Number(M.plab_n),Number(M.prov_n),d.neia)
-    +sCard('Dany','dany',Number(M.ant_d),Number(M.rec_d),Number(M.desp_d),Number(M.plab_d),Number(M.prov_d),d.dany)
+    +sCard('Néia','neia',Number(M.ant_n),Number(M.rec_n)+d.rn,Number(M.desp_n),d.dn,Number(M.plab_n),Number(M.prov_n),d.neia)
+    +sCard('Dany','dany',Number(M.ant_d),Number(M.rec_d)+d.rd,Number(M.desp_d),d.dd,Number(M.plab_d),Number(M.prov_d),d.dany)
     +'</div>'
     +'<div class="hero-tl">Total disponível</div>'
     +'<div class="hero-tv">'+fmt(totalDisp)+'</div>'
