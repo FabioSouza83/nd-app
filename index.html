@@ -326,7 +326,7 @@ var S = {
   tab: 'dashboard',
   erro: null,
   abre: {},
-  form: {tipo:'despesa', desc:'', valor:'', flag:'conjunta', cat:'fixo', venc:'', obs:''},
+  form: {tipo:'despesa', desc:'', valor:'', flag:'conjunta', cat:'fixo', venc:'', obs:'', parcelas:1},
   toast: null,
   toastErr: false,
   // Dados do Supabase
@@ -740,7 +740,6 @@ function renderLinhas(rn,rd,dn,dd,pn,pd,vn,vd,resN,resD,hasPlab){
 
 function renderForm(){
   var f=S.form;
-  var sp=f.valor&&f.flag==='conjunta'?parseFloat(f.valor)/2:null;
   var flagsHtml='';
   if(f.tipo==='despesa'){
     flagsHtml='<button class="fb'+(f.flag==='conjunta'?' sc':'')+'" data-flag="conjunta">🤝<span>Conjunta</span></button>'
@@ -767,8 +766,11 @@ function renderForm(){
   }
   html+='<div class="fg"><label>Descrição</label><input type="text" id="f-desc" placeholder="'+(f.tipo==='despesa'?'Ex: Material de limpeza':'Ex: Nome do paciente')+'" value="'+escapeHtml(f.desc)+'"></div>'
     +'<div class="fg"><label>Valor (R$)</label><input type="number" id="f-val" placeholder="0,00" value="'+f.valor+'" step="0.01" min="0"></div>';
-  // Container atualizado cirurgicamente pelo handler do valor (sem re-render → não perde o foco ao digitar)
-  html+='<div id="split-wrap">'+(sp?splitHtml(sp):'')+'</div>';
+  if(f.tipo==='despesa'){
+    html+='<div class="fg"><label>Parcelas (1 = à vista)</label><input type="number" id="f-parc" value="'+(f.parcelas||1)+'" min="1" max="36" step="1"></div>';
+  }
+  // Container atualizado cirurgicamente pelos handlers (sem re-render → não perde o foco ao digitar)
+  html+='<div id="split-wrap">'+previewLanc(f.valor, f.flag, f.tipo, (f.parcelas||1))+'</div>';
   html+='<div class="fg" style="margin-top:14px"><label>Observação (opcional)</label><textarea id="f-obs" rows="2" style="resize:none">'+escapeHtml(f.obs)+'</textarea></div>'
     +'<button class="btn" id="btn-salvar" style="margin-top:8px">💾 Salvar Lançamento</button>';
   return html;
@@ -779,6 +781,36 @@ function splitHtml(sp){
     +'<div class="sr"><span style="font-size:12px">Néia</span><span style="font-size:12px;font-weight:600">'+fmt(sp)+'</span></div>'
     +'<div class="sr"><span style="font-size:12px">Dany</span><span style="font-size:12px;font-weight:600">'+fmt(sp)+'</span></div>'
     +'</div>';
+}
+
+// Preview ao vivo do lançamento: parcelamento (despesa) e/ou divisão 50/50
+function previewLanc(valorStr, flag, tipo, nParc){
+  var v=parseFloat(valorStr);
+  if(isNaN(v)||v<=0) return '';
+  if(tipo==='despesa' && nParc>1){
+    var pBase=Math.round((v/nParc)*100)/100;
+    var pLast=Math.round((v - pBase*(nParc-1))*100)/100;
+    var html='<div class="split"><p style="font-size:11px;font-weight:600;color:#856404;margin-bottom:8px">💳 '+nParc+'x de '+fmt(pBase)+(pLast!==pBase?' (última '+fmt(pLast)+')':'')+'</p>';
+    if(flag==='conjunta'){
+      html+='<div class="sr"><span style="font-size:12px">Cada parcela · Néia</span><span style="font-size:12px;font-weight:600">'+fmt(pBase/2)+'</span></div>'
+        +'<div class="sr"><span style="font-size:12px">Cada parcela · Dany</span><span style="font-size:12px;font-weight:600">'+fmt(pBase/2)+'</span></div>';
+    }
+    html+='</div>';
+    return html;
+  }
+  if(flag==='conjunta'){ return splitHtml(v/2); }
+  return '';
+}
+function atualizarPreviewLanc(){
+  var w=document.getElementById('split-wrap');
+  if(w) w.innerHTML = previewLanc(S.form.valor, S.form.flag, S.form.tipo, (S.form.parcelas||1));
+}
+function hojeISO(){ var d=new Date(); return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate()); }
+function addMonthsISO(dateStr, i){
+  var p=(dateStr||'').split('-');
+  var d=(p.length===3)?new Date(parseInt(p[0],10),parseInt(p[1],10)-1,parseInt(p[2],10)):new Date();
+  d.setMonth(d.getMonth()+i);
+  return d.getFullYear()+'-'+pad2(d.getMonth()+1)+'-'+pad2(d.getDate());
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -1569,10 +1601,13 @@ function bindApp(){
   var fv=document.getElementById('f-val');
   if(fv)fv.addEventListener('input',function(e){
     S.form.valor=e.target.value;
-    // Atualiza só a Divisão 50/50, sem re-render (evita perder o foco/cursor ao digitar o valor)
-    var sp=(e.target.value && S.form.flag==='conjunta')?parseFloat(e.target.value)/2:null;
-    var w=document.getElementById('split-wrap');
-    if(w) w.innerHTML = sp ? splitHtml(sp) : '';
+    atualizarPreviewLanc(); // atualiza só o preview, sem re-render (preserva foco)
+  });
+  var fp=document.getElementById('f-parc');
+  if(fp)fp.addEventListener('input',function(e){
+    var n=parseInt(e.target.value,10);
+    S.form.parcelas=(n>0?n:1);
+    atualizarPreviewLanc();
   });
   var fd=document.getElementById('f-desc');
   if(fd)fd.addEventListener('input',function(e){S.form.desc=e.target.value;});
@@ -1769,35 +1804,61 @@ async function salvar(){
   if(!f.desc.trim()){showToast('Descrição obrigatória.',true);return;}
   if(isNaN(valor)||valor<=0){showToast('Valor inválido.',true);return;}
 
+  var nParc = (f.tipo==='despesa' && f.parcelas>1) ? Math.min(36, Math.floor(f.parcelas)) : 1;
+
   var btn=document.getElementById('btn-salvar');
   if(btn){btn.disabled=true;btn.textContent='Salvando…';}
 
-  var registro = {
-    tipo: f.tipo,
-    descricao: f.desc.trim(),
-    valor: valor,
-    flag: f.flag,
-    cat: f.tipo==='despesa' ? f.cat : null,
-    venc: f.tipo==='despesa' && f.venc ? f.venc : null,
-    obs: f.obs.trim() || null,
-    data: today(),
-    por: S.user.name,
-    em: nowStr(),
-    origem: 'manual'
-  };
+  var registros=[];
+  if(nParc>1){
+    // Compra parcelada: gera N lançamentos (total ÷ N), vencimento avançando 1 mês. Arredondamento sobra na última.
+    var baseVenc = f.venc || hojeISO();
+    var pBase = Math.round((valor/nParc)*100)/100;
+    var desc = f.desc.trim();
+    for(var i=0;i<nParc;i++){
+      var pv = (i<nParc-1) ? pBase : Math.round((valor - pBase*(nParc-1))*100)/100;
+      registros.push({
+        tipo: f.tipo,
+        descricao: desc+' ('+(i+1)+'/'+nParc+')',
+        valor: pv,
+        flag: f.flag,
+        cat: f.cat,
+        venc: addMonthsISO(baseVenc, i),
+        obs: f.obs.trim() || null,
+        data: today(),
+        por: S.user.name,
+        em: nowStr(),
+        origem: 'manual'
+      });
+    }
+  } else {
+    registros.push({
+      tipo: f.tipo,
+      descricao: f.desc.trim(),
+      valor: valor,
+      flag: f.flag,
+      cat: f.tipo==='despesa' ? f.cat : null,
+      venc: f.tipo==='despesa' && f.venc ? f.venc : null,
+      obs: f.obs.trim() || null,
+      data: today(),
+      por: S.user.name,
+      em: nowStr(),
+      origem: 'manual'
+    });
+  }
 
   try {
-    var res = await sb.from('nd_lancamentos').insert(registro).select().single();
+    var res = await sb.from('nd_lancamentos').insert(registros).select();
     if(res.error){
       console.error(res.error);
       showToast('Erro ao salvar: '+res.error.message,true);
       if(btn){btn.disabled=false;btn.textContent='💾 Salvar Lançamento';}
       return;
     }
-    S.LANC.push(res.data);
-    S.form = {tipo:'despesa', desc:'', valor:'', flag:'conjunta', cat:'fixo', venc:'', obs:''};
+    for(var r=0;r<res.data.length;r++) S.LANC.push(res.data[r]);
+    S.form = {tipo:'despesa', desc:'', valor:'', flag:'conjunta', cat:'fixo', venc:'', obs:'', parcelas:1};
     S.tab = 'dashboard';
-    showToast('Lançamento salvo ✅');
+    showToast(nParc>1 ? (nParc+' parcelas lançadas ✅') : 'Lançamento salvo ✅');
   } catch(e){
     console.error(e);
     showToast('Erro ao salvar.',true);
