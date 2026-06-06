@@ -284,6 +284,8 @@ html,body{height:100%;background:#E8E5DE;font-family:'DM Sans',sans-serif}
 .cp-total{font-family:'DM Serif Display',serif;font-size:15px;color:var(--navy);white-space:nowrap}
 .cp-meta{font-size:11px;color:var(--gray);margin-top:4px}
 .cp-prox{font-size:11px;color:var(--navy);margin-top:3px}
+.aud-mes{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--navy);margin:18px 0 8px 2px;padding-top:10px;border-top:1px solid #E0DDD6}
+.aud-mes:first-of-type{border-top:none;padding-top:0;margin-top:6px}
 </style>
 </head>
 <body>
@@ -1568,6 +1570,8 @@ function renderResTabela(meses){
 // COMPRAS A PRAZO (parcelamentos) — agrupa parcelas pelo "(i/N)" da descrição
 // ═══════════════════════════════════════════════════════════════
 function fmtVenc(v){ if(!v) return '—'; var p=String(v).split('-'); return (p.length===3)?(p[2]+'/'+p[1]+'/'+p[0]):v; }
+// Mês ('YYYY-MM' no fuso local) de um timestamp created_at — para agrupar a Trilha por mês
+function mesKeyLocal(iso){ if(!iso) return ''; var d=new Date(iso); return d.getFullYear()+'-'+pad2(d.getMonth()+1); }
 function listarParcelamentos(){
   var mesAtual=(S.MAIO && S.MAIO.mes_ref)?String(S.MAIO.mes_ref).slice(0,7):'';
   var re=/^(.*?)\s*\((\d+)\/(\d+)\)\s*$/;  // captura "Descrição (i/N)"
@@ -1620,8 +1624,12 @@ function renderAudit(){
   if(sorted.length===0){
     html+='<div class="empty"><div style="font-size:36px;opacity:.3;margin-bottom:10px">🔍</div><p>Nenhum registro ainda</p></div>';
   }else{
+    var curMes=null;
     for(var i=0;i<sorted.length;i++){
       var t=sorted[i];
+      // Cabeçalho de mês (agrupa por created_at no fuso local)
+      var mk=mesKeyLocal(t.created_at);
+      if(mk!==curMes){ curMes=mk; html+='<div class="aud-mes">'+(mk?fmtMesRef(mk):'Sem data')+'</div>'; }
       var catObj=null;
       for(var j=0;j<CATS.length;j++)if(CATS[j].id===t.cat)catObj=CATS[j];
       var badgeOrigem=t.origem==='extrato'?'<span style="display:inline-block;font-size:9px;font-weight:600;background:#E8E5DE;color:#666;padding:1px 6px;border-radius:20px;margin-left:6px;letter-spacing:.3px">SICOOB</span>':'';
