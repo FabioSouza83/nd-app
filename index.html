@@ -998,6 +998,23 @@ function renderFormPaciente(){
   html += '<div class="fg"><label>Data de nascimento (opcional)</label>'
     +'<input type="date" id="pf-nasc" value="'+(f.data_nascimento||'')+'"></div>';
 
+  // Dados para emissão de Nota Fiscal
+  html += '<div style="margin:20px 0 10px;font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--gray)">📄 Dados para Nota Fiscal (opcional)</div>';
+  html += '<div class="fg"><label>CPF</label>'
+    +'<input type="text" id="pf-cpf" inputmode="numeric" value="'+escapeHtml(f.cpf||'')+'" placeholder="000.000.000-00"></div>';
+  html += '<div class="fg"><label>RG</label>'
+    +'<input type="text" id="pf-rg" value="'+escapeHtml(f.rg||'')+'" placeholder="00.000.000-0"></div>';
+  html += '<div class="fg"><label>Rua / Logradouro</label>'
+    +'<input type="text" id="pf-rua" value="'+escapeHtml(f.end_rua||'')+'" placeholder="Ex: Av. Brasil"></div>';
+  html += '<div style="display:grid;grid-template-columns:1fr 2fr;gap:10px">'
+    +'<div class="fg"><label>Número</label><input type="text" id="pf-num" value="'+escapeHtml(f.end_numero||'')+'" placeholder="123"></div>'
+    +'<div class="fg"><label>Bairro</label><input type="text" id="pf-bairro" value="'+escapeHtml(f.end_bairro||'')+'" placeholder="Centro"></div></div>';
+  html += '<div style="display:grid;grid-template-columns:2fr 1fr;gap:10px">'
+    +'<div class="fg"><label>Cidade</label><input type="text" id="pf-cidade" value="'+escapeHtml(f.end_cidade||'')+'" placeholder="Ex: Campinas"></div>'
+    +'<div class="fg"><label>UF</label><input type="text" id="pf-uf" maxlength="2" value="'+escapeHtml(f.end_uf||'')+'" placeholder="SP" style="text-transform:uppercase"></div></div>';
+  html += '<div class="fg"><label>CEP</label>'
+    +'<input type="text" id="pf-cep" inputmode="numeric" value="'+escapeHtml(f.end_cep||'')+'" placeholder="00000-000"></div>';
+
   html += '<div class="fg"><label>Observação (opcional)</label>'
     +'<textarea id="pf-obs" rows="2" placeholder="Anotação geral">'+escapeHtml(f.observacao||'')+'</textarea></div>';
 
@@ -1033,6 +1050,16 @@ async function salvarPaciente(){
   var pag1 = (document.getElementById('pf-pag1').value||'').trim() || null;
   var pag2 = (document.getElementById('pf-pag2').value||'').trim() || null;
 
+  // Dados para NF
+  var cpf = (document.getElementById('pf-cpf').value||'').trim() || null;
+  var rg = (document.getElementById('pf-rg').value||'').trim() || null;
+  var endRua = (document.getElementById('pf-rua').value||'').trim() || null;
+  var endNum = (document.getElementById('pf-num').value||'').trim() || null;
+  var endBairro = (document.getElementById('pf-bairro').value||'').trim() || null;
+  var endCidade = (document.getElementById('pf-cidade').value||'').trim() || null;
+  var endUf = (document.getElementById('pf-uf').value||'').trim().toUpperCase() || null;
+  var endCep = (document.getElementById('pf-cep').value||'').trim() || null;
+
   var registro = {
     nome: nome,
     doutora: doutora,
@@ -1045,6 +1072,14 @@ async function salvarPaciente(){
     observacao: obs,
     pagador_1: pag1,
     pagador_2: pag2,
+    cpf: cpf,
+    rg: rg,
+    end_rua: endRua,
+    end_numero: endNum,
+    end_bairro: endBairro,
+    end_cidade: endCidade,
+    end_uf: endUf,
+    end_cep: endCep,
     criado_por: S.user.name
   };
 
