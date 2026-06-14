@@ -191,6 +191,18 @@ html,body{height:100%;background:#E8E5DE;font-family:'DM Sans',sans-serif}
 .at-wlbl{font-size:13px;font-weight:700;color:var(--navy);text-align:center}
 .at-wsub{font-size:10px;color:var(--gray);text-align:center;margin-top:1px}
 .at-wprev{font-size:11px;font-weight:700;color:var(--green);text-align:center;margin-top:3px}
+.at-toggle{display:flex;gap:8px;margin-bottom:14px}
+.at-toggle .pac-fbtn{flex:1;text-align:center}
+.rec-sub{font-size:12px;color:var(--gray);margin:-4px 0 12px}
+.rec-m{padding:9px 0;border-bottom:1px solid #EFEDE8}
+.rec-m:last-child{border-bottom:none}
+.rec-m-top{display:flex;justify-content:space-between;align-items:baseline}
+.rec-m-mes{font-size:13px;font-weight:700;color:var(--navy)}
+.rec-m-tot{font-size:14px;font-weight:700;color:var(--green)}
+.rec-m-det{display:flex;flex-wrap:wrap;gap:6px 14px;margin-top:3px}
+.rec-conf{font-size:11px;color:var(--green)}
+.rec-prev{font-size:11px;color:var(--gray)}
+.rec-empty{font-size:12px;color:var(--gray);padding:6px 0}
 .at-day{margin-bottom:16px}
 .at-day-tt{font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.8px;margin:0 0 8px 4px}
 .at-day-empty{font-size:12px;color:#BBB;padding:2px 4px 6px;font-style:italic}
@@ -286,6 +298,8 @@ html,body{height:100%;background:#E8E5DE;font-family:'DM Sans',sans-serif}
 .cp-prox{font-size:11px;color:var(--navy);margin-top:3px}
 .aud-mes{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:var(--navy);margin:18px 0 8px 2px;padding-top:10px;border-top:1px solid #E0DDD6}
 .aud-mes:first-of-type{border-top:none;padding-top:0;margin-top:6px}
+.cat-chip{display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:#E8EEF6;color:var(--neia-d);margin-top:5px}
+.cat-chip.vazio{background:var(--amber);color:var(--navy)}
 </style>
 </head>
 <body>
@@ -517,7 +531,9 @@ function renderApp(){
     content = (S.view==='pacForm') ? renderFormPaciente() : renderPacientes();
   }
   else if(S.tab==='atendimentos'){
-    content = (S.atView==='form') ? renderFormAtendimento() : renderAtendimentos();
+    content = (S.atView==='form') ? renderFormAtendimento()
+            : (S.atView==='receb') ? renderRecebiveis()
+            : renderAtendimentos();
   }
   else if(S.tab==='lancamento')content=renderForm();
   else if(S.tab==='auditoria')content=renderAudit();
@@ -927,11 +943,23 @@ function renderPacientes(){
   return html;
 }
 
+// Categorias do paciente (flag p/ regras de NF, 80/20 e destino do pagamento). Banco já tem a coluna.
+var CATEGORIAS=[
+  {id:'particular_pf', l:'Particular PF'},
+  {id:'particular_nf', l:'Particular com NF'},
+  {id:'clinica_nd',    l:'Clínica ND'},
+  {id:'legado',        l:'Legado'}
+];
+function categoriaLabel(c){ for(var i=0;i<CATEGORIAS.length;i++) if(CATEGORIAS[i].id===c) return CATEGORIAS[i].l; return c||''; }
+
 function renderPacienteCard(p){
   var valorTxt = p.valor_padrao ? fmt(Number(p.valor_padrao)) : '—';
   var freqTxt = freqLabel(p.frequencia);
   if(p.frequencia==='outra' && p.frequencia_obs) freqTxt = p.frequencia_obs;
   var badge = 'bd-'+p.status;
+  var catChip = p.categoria
+    ? '<span class="cat-chip">🏷️ '+escapeHtml(categoriaLabel(p.categoria))+'</span>'
+    : '<span class="cat-chip vazio">⚠️ classificar</span>';
   // Pagador (quando paciente é dependente — criança)
   var pagadorTxt = '';
   if(p.pagador_1){
@@ -945,6 +973,7 @@ function renderPacienteCard(p){
     +'<span>💰 '+valorTxt+'</span>'
     +'<span>🔄 '+escapeHtml(freqTxt)+'</span>'
     +'</div>'
+    +'<div>'+catChip+'</div>'
     +'</div>'
     +'<div class="pac-r"><span class="pac-bd '+badge+'">'+statusLabel(p.status)+'</span></div>'
     +'</div>';
@@ -977,6 +1006,13 @@ function renderFormPaciente(){
 
   html += '<div class="fg"><label>Nome do paciente *</label>'
     +'<input type="text" id="pf-nome" value="'+escapeHtml(f.nome||'')+'" placeholder="Nome completo"></div>';
+
+  // Categoria — obrigatória no cadastro novo; pode estar null em pacientes antigos (mostra aviso p/ classificar)
+  var cat = f.categoria || '';
+  var catOpts = '<option value="">Selecione…</option>';
+  for(var ci=0;ci<CATEGORIAS.length;ci++){ catOpts += '<option value="'+CATEGORIAS[ci].id+'"'+(cat===CATEGORIAS[ci].id?' selected':'')+'>'+CATEGORIAS[ci].l+'</option>'; }
+  html += '<div class="fg"><label>Categoria *'+(!cat?' <span style="font-weight:400;color:var(--amber);text-transform:none;letter-spacing:0">— classificar</span>':'')+'</label>'
+    +'<select id="pf-categoria"'+(!cat?' style="border-color:var(--amber);background:#FFFBF0"':'')+'>'+catOpts+'</select></div>';
 
   // Pagadores — usados quando paciente é criança/dependente
   // Quando vazios: paciente é o próprio pagador
@@ -1058,6 +1094,10 @@ async function salvarPaciente(){
   var nome = (document.getElementById('pf-nome').value||'').trim();
   if(!nome){ showToast('Informe o nome do paciente.', true); return; }
 
+  var categoria = document.getElementById('pf-categoria').value || null;
+  // Categoria é obrigatória só ao CADASTRAR novo; pacientes existentes podem ficar null (classificar depois)
+  if(!f.id && !categoria){ showToast('Selecione a categoria do paciente.', true); return; }
+
   var doutora = document.getElementById('pf-doutora').value;
 
   var valor = parseFloat(document.getElementById('pf-valor').value)||null;
@@ -1100,6 +1140,7 @@ async function salvarPaciente(){
     end_cidade: endCidade,
     end_uf: endUf,
     end_cep: endCep,
+    categoria: categoria,
     criado_por: S.user.name
   };
 
@@ -1226,6 +1267,7 @@ function renderAtendimentos(){
   var prevTxt = previsto>0 ? '<div class="at-wprev">Previsto faturável · '+fmt(previsto)+'</div>' : '';
 
   var html='<p class="stt">Atendimentos</p>'
+    +atToggle('agenda')
     +'<div class="at-week">'
     +'<button class="at-wnav" id="btn-sem-prev">◀</button>'
     +'<div><div class="at-wlbl">'+lblIni+' – '+lblFim+'</div><div class="at-wsub">'+sub+' · '+total+' atend.</div>'+prevTxt+'</div>'
@@ -1247,6 +1289,81 @@ function renderAtendimentos(){
     html+='</div>';
   }
   return html;
+}
+
+// Alterna entre a Agenda (semana) e os Recebíveis (previsão de caixa), dentro da aba Atendimentos.
+function atToggle(active){
+  return '<div class="at-toggle">'
+    +'<button class="pac-fbtn'+(active==='agenda'?' on':'')+'" id="btn-at-agenda">🗓️ Agenda</button>'
+    +'<button class="pac-fbtn'+(active==='receb'?' on':'')+'" id="btn-at-receb">💰 Recebíveis</button>'
+    +'</div>';
+}
+
+// Recebíveis / previsão de caixa: projeta a entrada de receita a partir dos atendimentos
+// faturáveis (agendado, realizado, falta faturada), agrupados por mês e SEMPRE individual por Dra.
+// "A receber" = serviço prestado ou falta cobrável (realizado, falta_faturada). "Previsto" = agendado.
+// Horizonte: do 1º dia do mês atual em diante (realizados do mês ainda contam como a receber).
+function renderRecebiveis(){
+  var FATURAVEL={agendado:1, realizado:1, falta_faturada:1};
+  var CONFIRMADO={realizado:1, falta_faturada:1};
+  var now=new Date();
+  var floor=new Date(now.getFullYear(), now.getMonth(), 1); // 1º dia do mês atual, 00:00 local
+  var buckets={neia:{}, dany:{}};
+  for(var i=0;i<S.ATEND.length;i++){
+    var a=S.ATEND[i];
+    if(!FATURAVEL[a.status] || a.valor==null) continue;
+    var d=new Date(a.data_hora);
+    if(d<floor) continue;
+    var dr=(a.doutora==='dany')?'dany':'neia';
+    var mk=d.getFullYear()+'-'+pad2(d.getMonth()+1);
+    var b=buckets[dr][mk] || (buckets[dr][mk]={conf:0, prev:0, nConf:0, nPrev:0, mi:d.getMonth(), yr:d.getFullYear()});
+    var v=Number(a.valor);
+    if(CONFIRMADO[a.status]){ b.conf+=v; b.nConf++; } else { b.prev+=v; b.nPrev++; }
+  }
+
+  // Totais por Dra
+  var tot=function(cls){ var c=0,p=0,mks=Object.keys(buckets[cls]); for(var k=0;k<mks.length;k++){ c+=buckets[cls][mks[k]].conf; p+=buckets[cls][mks[k]].prev; } return {conf:c, prev:p}; };
+  var tN=tot('neia'), tD=tot('dany');
+
+  var recCard=function(name,cls,t){
+    return '<div class="sc '+cls+'">'
+      +'<div class="sc-name '+cls+'">'+name+'</div>'
+      +'<div class="sc-line"><span class="sc-line-l">A receber</span><span class="sc-line-v">'+fmt(t.conf)+'</span></div>'
+      +'<div class="sc-line"><span class="sc-line-l">Previsto</span><span class="sc-line-v">'+fmt(t.prev)+'</span></div>'
+      +'<div class="sc-disp"><span class="sc-disp-l">Total projetado</span><span class="sc-disp-v">'+fmt(t.conf+t.prev)+'</span></div>'
+      +'</div>';
+  };
+
+  var detalheDra=function(name,cls,dcolor){
+    var mks=Object.keys(buckets[cls]).sort(); // 'YYYY-MM' ordena cronologicamente
+    var inner='';
+    if(mks.length===0){
+      inner='<div class="rec-empty">Sem recebíveis futuros.</div>';
+    } else {
+      for(var m=0;m<mks.length;m++){
+        var b=buckets[cls][mks[m]];
+        inner+='<div class="rec-m">'
+          +'<div class="rec-m-top"><span class="rec-m-mes">'+MESES[b.mi]+' '+b.yr+'</span><span class="rec-m-tot">'+fmt(b.conf+b.prev)+'</span></div>'
+          +'<div class="rec-m-det">'
+          +'<span class="rec-conf">● A receber '+fmt(b.conf)+' · '+b.nConf+'</span>'
+          +'<span class="rec-prev">○ Previsto '+fmt(b.prev)+' · '+b.nPrev+'</span>'
+          +'</div></div>';
+      }
+    }
+    return '<div class="card"><div class="card-title" style="color:'+dcolor+'">Dra. '+name+' · por mês</div>'+inner+'</div>';
+  };
+
+  return '<p class="stt">Recebíveis</p>'
+    +atToggle('receb')
+    +'<p class="rec-sub">Previsão de entrada dos atendimentos faturáveis, do mês atual em diante.</p>'
+    +'<div class="hero">'
+    +'<div class="hero-label">Entrada projetada · individual por Dra</div>'
+    +'<div class="scards">'+recCard('Néia','neia',tN)+recCard('Dany','dany',tD)+'</div>'
+    +'<div class="hero-tl">Total geral projetado</div>'
+    +'<div class="hero-tv">'+fmt(tN.conf+tN.prev+tD.conf+tD.prev)+'</div>'
+    +'</div>'
+    +detalheDra('Néia','neia','var(--neia-d)')
+    +detalheDra('Dany','dany','var(--dany-d)');
 }
 
 function renderAtendCard(a){
@@ -1807,6 +1924,10 @@ function bindApp(){
   });
 
   // ── Atendimentos (Onda 2.A) ──
+  var btnAtAgenda=document.getElementById('btn-at-agenda');
+  if(btnAtAgenda)btnAtAgenda.addEventListener('click',function(){ S.atView=null; render(); });
+  var btnAtReceb=document.getElementById('btn-at-receb');
+  if(btnAtReceb)btnAtReceb.addEventListener('click',function(){ S.atView='receb'; render(); });
   var btnAtAdd=document.getElementById('btn-at-add');
   if(btnAtAdd)btnAtAdd.addEventListener('click',function(){ S.atEdit=null; S.atView='form'; render(); });
   var btnAtCancelar=document.getElementById('btn-at-cancelar');
