@@ -193,6 +193,15 @@ html,body{height:100%;background:#E8E5DE;font-family:'DM Sans',sans-serif}
 .at-wprev{font-size:11px;font-weight:700;color:var(--green);text-align:center;margin-top:3px}
 .at-toggle{display:flex;gap:8px;margin-bottom:14px}
 .at-toggle .pac-fbtn{flex:1;text-align:center}
+.ag-coltoggle{display:flex;gap:6px;margin-bottom:10px}
+.ag-coltoggle .pac-fbtn{flex:1;text-align:center;padding:7px 4px}
+.ag2-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:start}
+.ag2-col{min-width:0}
+.ag2-col-h{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;text-align:center;padding:3px 0;margin-bottom:6px;border-radius:6px}
+.ag2-col-h.dany{background:var(--dany);color:var(--dany-d)}
+.ag2-col-h.neia{background:var(--neia);color:var(--neia-d)}
+.ag2-col .at-card{padding:9px 10px}
+.ag2-col .at-hora{min-width:38px;font-size:14px}
 .rec-sub{font-size:12px;color:var(--gray);margin:-4px 0 12px}
 .rec-m{padding:9px 0;border-bottom:1px solid #EFEDE8}
 .rec-m:last-child{border-bottom:none}
@@ -376,6 +385,8 @@ var S = {
   PAC_NOMES: {},  // mapa id->nome de TODOS os pacientes (inclui excluídos)
   // Atendimentos (Onda 2.A)
   semOffset: 0,   // deslocamento de semanas na visão de Atendimentos
+  agCol: 'ambas', // agenda em colunas: 'ambas' | 'dany' | 'neia'
+  agBusca: '',    // busca da agenda por nome
   atView: null,   // 'form'=atendimento, 'aval'=avaliação, 'receb'=recebíveis
   atEdit: null,   // objeto do atendimento em edição (null = novo)
   caixaEdit: false // true quando o Fábio está ajustando o Caixa da Empresa
@@ -1311,37 +1322,47 @@ function inicioSemana(offset){
 }
 var DIAS_SEM=['Domingo','Segunda','Terça','Quarta','Quinta','Sexta'];
 
+// Filtra os cards da agenda por nome (atendimento=paciente, avaliação=lead), sem re-render (preserva foco)
+function filtrarAgendaDOM(){
+  var inp=document.getElementById('ag-busca'); if(!inp) return;
+  var q=normTxt(inp.value);
+  var cards=document.querySelectorAll('#ag-list .at-card[data-busca]');
+  for(var i=0;i<cards.length;i++){
+    var match=!q || cards[i].getAttribute('data-busca').indexOf(q)>=0;
+    cards[i].style.display = match ? '' : 'none';
+  }
+}
+
 function renderAtendimentos(){
   var ws=inicioSemana(S.semOffset);
   var fim=new Date(ws.getFullYear(),ws.getMonth(),ws.getDate()); fim.setDate(fim.getDate()+5); // Sexta
-
-  // Agrupa atendimentos da semana (Domingo a Sexta) por dia
-  // 'Previsto' = soma dos valores faturáveis (agendado, realizado, falta faturada). Semente dos Recebíveis.
   var FATURAVEL={agendado:1, realizado:1, falta_faturada:1};
-  var dias=[[],[],[],[],[],[]];
-  var previsto=0;
   function diaIdx(iso){ var d=new Date(iso); var dMid=new Date(d.getFullYear(),d.getMonth(),d.getDate()); return Math.round((dMid-ws)/86400000); }
+
+  // Agrupa por dia E por doutora (coluna Dany | coluna Néia)
+  var dias=[]; for(var d6=0;d6<6;d6++) dias.push({neia:[], dany:[]});
+  var previsto=0, total=0;
   for(var i=0;i<S.ATEND.length;i++){
-    var a=S.ATEND[i];
-    var diff=diaIdx(a.data_hora);
-    if(diff>=0 && diff<=5){
-      dias[diff].push({tipo:'atend', dh:a.data_hora, obj:a});
-      if(FATURAVEL[a.status] && a.valor!=null) previsto+=Number(a.valor);
-    }
+    var a=S.ATEND[i]; var diff=diaIdx(a.data_hora);
+    if(diff>=0 && diff<=5){ var dr=(a.doutora==='dany')?'dany':'neia'; dias[diff][dr].push({tipo:'atend', dh:a.data_hora, obj:a}); total++; if(FATURAVEL[a.status] && a.valor!=null) previsto+=Number(a.valor); }
   }
-  // Avaliações (leads) entram na mesma agenda, visualmente distintas
   for(var av=0;av<S.AVAL.length;av++){
-    var vv=S.AVAL[av];
-    var diffA=diaIdx(vv.data_hora);
-    if(diffA>=0 && diffA<=5) dias[diffA].push({tipo:'aval', dh:vv.data_hora, obj:vv});
+    var vv=S.AVAL[av]; var diffA=diaIdx(vv.data_hora);
+    if(diffA>=0 && diffA<=5){ var drv=(vv.doutora==='dany')?'dany':'neia'; dias[diffA][drv].push({tipo:'aval', dh:vv.data_hora, obj:vv}); total++; }
   }
-  var total=0;
-  for(var z=0;z<6;z++){ total+=dias[z].length; dias[z].sort(function(x,y){return new Date(x.dh)-new Date(y.dh)}); }
+  function srt(arr){ arr.sort(function(x,y){return new Date(x.dh)-new Date(y.dh)}); }
+  for(var z=0;z<6;z++){ srt(dias[z].dany); srt(dias[z].neia); }
 
   var lblIni=pad2(ws.getDate())+'/'+pad2(ws.getMonth()+1);
   var lblFim=pad2(fim.getDate())+'/'+pad2(fim.getMonth()+1);
   var sub = S.semOffset===0 ? 'Esta semana' : (S.semOffset<0 ? 'Semana anterior' : 'Próxima semana');
   var prevTxt = previsto>0 ? '<div class="at-wprev">Previsto faturável · '+fmt(previsto)+'</div>' : '';
+  var col = S.agCol || 'ambas';  // 'ambas' = 2 colunas; 'dany'/'neia' = coluna única (mobile)
+
+  function renderItens(arr){
+    if(arr.length===0) return '<div class="at-day-empty">—</div>';
+    var s=''; for(var j=0;j<arr.length;j++){ var it=arr[j]; s += (it.tipo==='aval') ? renderAvalCard(it.obj) : renderAtendCard(it.obj); } return s;
+  }
 
   var html='<p class="stt">Atendimentos</p>'
     +atToggle('agenda')
@@ -1350,21 +1371,32 @@ function renderAtendimentos(){
     +'<div><div class="at-wlbl">'+lblIni+' – '+lblFim+'</div><div class="at-wsub">'+sub+' · '+total+' itens</div>'+prevTxt+'</div>'
     +'<button class="at-wnav" id="btn-sem-next">▶</button>'
     +'</div>'
+    +'<div class="ag-coltoggle">'
+    +'<button class="pac-fbtn'+(col==='ambas'?' on':'')+'" data-agcol="ambas">👥 Ambas</button>'
+    +'<button class="pac-fbtn'+(col==='dany'?' on':'')+'" data-agcol="dany">Dra. Dany</button>'
+    +'<button class="pac-fbtn'+(col==='neia'?' on':'')+'" data-agcol="neia">Dra. Néia</button>'
+    +'</div>'
+    +'<div class="pac-busca-wrap"><span class="pac-busca-ico">🔍</span><input type="text" id="ag-busca" class="pac-busca" placeholder="Buscar por nome…" value="'+escapeHtml(S.agBusca||'')+'"></div>'
     +'<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">'
     +(S.semOffset!==0?'<button class="pac-fbtn" id="btn-sem-hoje">Esta semana</button>':'')
     +'<button class="pac-add" id="btn-at-add" style="margin-left:auto">+ Novo</button>'
     +'</div>';
 
+  html+='<div id="ag-list">';
   for(var k=0;k<6;k++){
     var dd=new Date(ws.getFullYear(),ws.getMonth(),ws.getDate()); dd.setDate(dd.getDate()+k);
     html+='<div class="at-day"><p class="at-day-tt">'+DIAS_SEM[k]+' · '+pad2(dd.getDate())+'/'+pad2(dd.getMonth()+1)+'</p>';
-    if(dias[k].length===0){
-      html+='<div class="at-day-empty">Sem itens</div>';
+    if(col==='ambas'){
+      html+='<div class="ag2-grid">'
+        +'<div class="ag2-col"><div class="ag2-col-h dany">Dany</div>'+renderItens(dias[k].dany)+'</div>'
+        +'<div class="ag2-col"><div class="ag2-col-h neia">Néia</div>'+renderItens(dias[k].neia)+'</div>'
+        +'</div>';
     } else {
-      for(var j=0;j<dias[k].length;j++){ var it=dias[k][j]; html += (it.tipo==='aval') ? renderAvalCard(it.obj) : renderAtendCard(it.obj); }
+      html+=renderItens(dias[k][col]);
     }
     html+='</div>';
   }
+  html+='</div>';
   return html;
 }
 
@@ -1453,7 +1485,7 @@ function renderAtendCard(a){
   }
   var serie = a.serie_id ? '<span class="at-serie" title="Atendimento recorrente">🔁</span>' : '';
   var btnSerie = a.serie_id ? '<button class="at-del" data-at-delserie="'+a.serie_id+'" data-at-from="'+a.data_hora+'" title="Remover esta e as próximas da série">🔁✕</button>' : '';
-  return '<div class="at-card '+dr+'">'
+  return '<div class="at-card '+dr+'" data-busca="'+escapeHtml(normTxt(pacNome(a.paciente_id)))+'">'
     +'<div class="at-top">'
     +'<span class="at-hora">'+fmtHora(a.data_hora)+'</span>'
     +'<span class="at-nome">'+escapeHtml(pacNome(a.paciente_id))+serie+'</span>'
@@ -1506,7 +1538,7 @@ function renderAvalCard(v){
   } else if(v.status==='nao_convertida'){
     convBlock='<div class="av-conv-done no">✗ Lead não convertido</div>';
   }
-  return '<div class="at-card aval '+dr+'">'
+  return '<div class="at-card aval '+dr+'" data-busca="'+escapeHtml(normTxt(v.nome))+'">'
     +'<div class="at-top">'
     +'<span class="at-hora">'+fmtHora(v.data_hora)+'</span>'
     +'<span class="at-nome">'+escapeHtml(v.nome)+'</span>'
@@ -2172,6 +2204,12 @@ function bindApp(){
   if(btnAtReceb)btnAtReceb.addEventListener('click',function(){ S.atView='receb'; render(); });
   var btnAtAdd=document.getElementById('btn-at-add');
   if(btnAtAdd)btnAtAdd.addEventListener('click',function(){ S.atEdit=null; S.atView='form'; render(); });
+  var agCols=document.querySelectorAll('[data-agcol]');
+  for(var ac=0;ac<agCols.length;ac++){
+    (function(b){b.addEventListener('click',function(){ S.agCol=b.dataset.agcol; render(); });})(agCols[ac]);
+  }
+  var agBusca=document.getElementById('ag-busca');
+  if(agBusca){ agBusca.addEventListener('input',function(e){ S.agBusca=e.target.value; filtrarAgendaDOM(); }); filtrarAgendaDOM(); }
   var btnAtCancelar=document.getElementById('btn-at-cancelar');
   if(btnAtCancelar)btnAtCancelar.addEventListener('click',function(){ S.atView=null; S.atEdit=null; render(); });
   var atEdits=document.querySelectorAll('[data-at-edit]');
