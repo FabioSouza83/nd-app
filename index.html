@@ -209,6 +209,8 @@ html,body{height:100%;background:#E8E5DE;font-family:'DM Sans',sans-serif}
 .at-card{background:white;border-radius:var(--r2);padding:11px 13px;margin-bottom:8px;box-shadow:0 2px 8px rgba(27,42,74,.06);border-left:3px solid #E0DDD6}
 .at-card.neia{border-left-color:var(--neia-d)}
 .at-card.dany{border-left-color:var(--dany-d)}
+.at-card.aval{border-left-color:#7C5CBF;background:#FBF9FF}
+.av-tag{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:#EDE6FA;color:#5B3D9E;white-space:nowrap;flex-shrink:0}
 .at-top{display:flex;align-items:center;gap:9px}
 .at-hora{font-family:'DM Serif Display',serif;font-size:15px;color:var(--navy);min-width:46px}
 .at-nome{font-size:13px;font-weight:600;color:var(--navy);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -364,10 +366,11 @@ var S = {
   HIST: [],
   LANC: [],
   ATEND: [],
+  AVAL: [],       // avaliações (leads) na agenda
   PAC_NOMES: {},  // mapa id->nome de TODOS os pacientes (inclui excluídos)
   // Atendimentos (Onda 2.A)
   semOffset: 0,   // deslocamento de semanas na visão de Atendimentos
-  atView: null,   // 'form' quando o formulário de atendimento está aberto
+  atView: null,   // 'form'=atendimento, 'aval'=avaliação, 'receb'=recebíveis
   atEdit: null,   // objeto do atendimento em edição (null = novo)
   caixaEdit: false // true quando o Fábio está ajustando o Caixa da Empresa
 };
@@ -402,14 +405,15 @@ function showToast(msg, isErr){
 // ═══════════════════════════════════════════════════════════════
 async function carregarDados(){
   try {
-    var [meta, saldos, hist, lanc, pac, atend, pacAll] = await Promise.all([
+    var [meta, saldos, hist, lanc, pac, atend, pacAll, aval] = await Promise.all([
       sb.from('nd_meta').select('*').eq('id',1).single(),
       sb.from('nd_saldos_mes').select('*').eq('id',1).single(),
       sb.from('nd_historico').select('*').order('ordem',{ascending:true}),
       sb.from('nd_lancamentos').select('*').order('created_at',{ascending:true}),
       sb.from('nd_pacientes').select('*').eq('excluido', false).order('nome',{ascending:true}),
       sb.from('nd_atendimentos').select('*').eq('excluido', false).order('data_hora',{ascending:true}),
-      sb.from('nd_pacientes').select('id,nome')
+      sb.from('nd_pacientes').select('id,nome'),
+      sb.from('nd_avaliacoes').select('*').eq('excluido', false).order('data_hora',{ascending:true})
     ]);
 
     if(meta.error) throw new Error('meta: '+meta.error.message);
@@ -419,6 +423,7 @@ async function carregarDados(){
     if(pac.error) throw new Error('pacientes: '+pac.error.message);
     if(atend.error) throw new Error('atendimentos: '+atend.error.message);
     if(pacAll.error) throw new Error('pacientes(nomes): '+pacAll.error.message);
+    if(aval.error) throw new Error('avaliacoes: '+aval.error.message);
 
     S.META = meta.data;
     S.MAIO = saldos.data;
@@ -426,6 +431,7 @@ async function carregarDados(){
     S.LANC = lanc.data;
     S.PACIENTES = pac.data || [];
     S.ATEND = atend.data || [];
+    S.AVAL = aval.data || [];
     // Mapa id->nome de TODOS os pacientes (inclui excluídos) para a agenda não perder o nome
     S.PAC_NOMES = {};
     if(pacAll.data) for(var pn=0;pn<pacAll.data.length;pn++) S.PAC_NOMES[pacAll.data[pn].id]=pacAll.data[pn].nome;
@@ -536,6 +542,7 @@ function renderApp(){
   }
   else if(S.tab==='atendimentos'){
     content = (S.atView==='form') ? renderFormAtendimento()
+            : (S.atView==='aval') ? renderFormAvaliacao()
             : (S.atView==='receb') ? renderRecebiveis()
             : renderAtendimentos();
   }
@@ -1301,18 +1308,23 @@ function renderAtendimentos(){
   var FATURAVEL={agendado:1, realizado:1, falta_faturada:1};
   var dias=[[],[],[],[],[],[]];
   var previsto=0;
+  function diaIdx(iso){ var d=new Date(iso); var dMid=new Date(d.getFullYear(),d.getMonth(),d.getDate()); return Math.round((dMid-ws)/86400000); }
   for(var i=0;i<S.ATEND.length;i++){
     var a=S.ATEND[i];
-    var d=new Date(a.data_hora);
-    var dMid=new Date(d.getFullYear(),d.getMonth(),d.getDate());
-    var diff=Math.round((dMid-ws)/86400000);
+    var diff=diaIdx(a.data_hora);
     if(diff>=0 && diff<=5){
-      dias[diff].push(a);
+      dias[diff].push({tipo:'atend', dh:a.data_hora, obj:a});
       if(FATURAVEL[a.status] && a.valor!=null) previsto+=Number(a.valor);
     }
   }
+  // Avaliações (leads) entram na mesma agenda, visualmente distintas
+  for(var av=0;av<S.AVAL.length;av++){
+    var vv=S.AVAL[av];
+    var diffA=diaIdx(vv.data_hora);
+    if(diffA>=0 && diffA<=5) dias[diffA].push({tipo:'aval', dh:vv.data_hora, obj:vv});
+  }
   var total=0;
-  for(var z=0;z<6;z++){ total+=dias[z].length; dias[z].sort(function(x,y){return new Date(x.data_hora)-new Date(y.data_hora)}); }
+  for(var z=0;z<6;z++){ total+=dias[z].length; dias[z].sort(function(x,y){return new Date(x.dh)-new Date(y.dh)}); }
 
   var lblIni=pad2(ws.getDate())+'/'+pad2(ws.getMonth()+1);
   var lblFim=pad2(fim.getDate())+'/'+pad2(fim.getMonth()+1);
@@ -1323,7 +1335,7 @@ function renderAtendimentos(){
     +atToggle('agenda')
     +'<div class="at-week">'
     +'<button class="at-wnav" id="btn-sem-prev">◀</button>'
-    +'<div><div class="at-wlbl">'+lblIni+' – '+lblFim+'</div><div class="at-wsub">'+sub+' · '+total+' atend.</div>'+prevTxt+'</div>'
+    +'<div><div class="at-wlbl">'+lblIni+' – '+lblFim+'</div><div class="at-wsub">'+sub+' · '+total+' itens</div>'+prevTxt+'</div>'
     +'<button class="at-wnav" id="btn-sem-next">▶</button>'
     +'</div>'
     +'<div style="display:flex;gap:8px;align-items:center;margin-bottom:14px">'
@@ -1335,9 +1347,9 @@ function renderAtendimentos(){
     var dd=new Date(ws.getFullYear(),ws.getMonth(),ws.getDate()); dd.setDate(dd.getDate()+k);
     html+='<div class="at-day"><p class="at-day-tt">'+DIAS_SEM[k]+' · '+pad2(dd.getDate())+'/'+pad2(dd.getMonth()+1)+'</p>';
     if(dias[k].length===0){
-      html+='<div class="at-day-empty">Sem atendimentos</div>';
+      html+='<div class="at-day-empty">Sem itens</div>';
     } else {
-      for(var j=0;j<dias[k].length;j++) html+=renderAtendCard(dias[k][j]);
+      for(var j=0;j<dias[k].length;j++){ var it=dias[k][j]; html += (it.tipo==='aval') ? renderAvalCard(it.obj) : renderAtendCard(it.obj); }
     }
     html+='</div>';
   }
@@ -1443,6 +1455,118 @@ function renderAtendCard(a){
     +'</div>';
 }
 
+// ═══════════════════════════════════════════════════════════════
+// AVALIAÇÕES (leads) na agenda — Parte A
+// ═══════════════════════════════════════════════════════════════
+var AVAL_STATUS=[
+  {id:'agendada', l:'Agendada'},
+  {id:'realizada',l:'Realizada'},
+  {id:'falta',    l:'Falta'},
+  {id:'cancelada',l:'Cancelada'}
+];
+function avalStatusLabel(s){ for(var i=0;i<AVAL_STATUS.length;i++) if(AVAL_STATUS[i].id===s) return AVAL_STATUS[i].l; return s; }
+function origemLabel(o){ for(var i=0;i<ORIGENS.length;i++) if(ORIGENS[i].id===o) return ORIGENS[i].l; return o||''; }
+
+// Alterna o tipo do item ao criar na agenda: Atendimento x Avaliação
+function novoToggle(active){
+  return '<div class="at-toggle">'
+    +'<button class="pac-fbtn'+(active==='atend'?' on':'')+'" id="btn-novo-atend">🗓️ Atendimento</button>'
+    +'<button class="pac-fbtn'+(active==='aval'?' on':'')+'" id="btn-novo-aval">🧪 Avaliação</button>'
+    +'</div>';
+}
+
+function renderAvalCard(v){
+  var dr=v.doutora||'neia';
+  var drColor=dr==='dany'?'color:var(--dany-d)':'color:var(--neia-d)';
+  var acts='';
+  for(var i=0;i<AVAL_STATUS.length;i++){
+    var st=AVAL_STATUS[i];
+    acts+='<button class="at-act'+(v.status===st.id?' on':'')+'" data-av-st="'+st.id+'" data-av-id="'+v.id+'">'+st.l+'</button>';
+  }
+  var valTxt = (v.valor!=null) ? fmt(Number(v.valor)) : 'cortesia';
+  return '<div class="at-card aval '+dr+'">'
+    +'<div class="at-top">'
+    +'<span class="at-hora">'+fmtHora(v.data_hora)+'</span>'
+    +'<span class="at-nome">'+escapeHtml(v.nome)+'</span>'
+    +'<span class="av-tag">🧪 Avaliação</span>'
+    +'<button class="at-del" data-av-del="'+v.id+'" title="Remover">🗑️</button>'
+    +'</div>'
+    +'<div style="font-size:11px;font-weight:600;margin-top:3px;'+drColor+'">'+drLabel(dr)
+      +(v.telefone?'<span style="color:var(--gray)"> · 📞 '+escapeHtml(v.telefone)+'</span>':'')
+      +'<span style="color:var(--gray)"> · '+valTxt+'</span>'
+      +(v.origem?'<span style="color:var(--gray)"> · '+escapeHtml(origemLabel(v.origem))+'</span>':'')
+      +'</div>'
+    +'<div class="at-actions">'+acts+'</div>'
+    +'</div>';
+}
+
+function renderFormAvaliacao(){
+  var defaultDr = S.user.role==='dany' ? 'dany' : 'neia';
+  var origOpts='<option value="">Selecione…</option>';
+  for(var oi=0;oi<ORIGENS.length;oi++){ origOpts+='<option value="'+ORIGENS[oi].id+'">'+ORIGENS[oi].l+'</option>'; }
+  return '<p class="stt">Nova avaliação</p>'
+    +novoToggle('aval')
+    +'<p class="ssub">Lead leve: nome + telefone + origem. Vira paciente depois, se converter.</p>'
+    +'<div class="fg"><label>Nome *</label><input type="text" id="av-nome" placeholder="Nome do lead"></div>'
+    +'<div class="fg"><label>Telefone</label><input type="tel" id="av-tel" placeholder="(19) 9 9999-9999"></div>'
+    +'<div class="fg"><label>Origem <span style="font-weight:400;color:var(--gray);text-transform:none;letter-spacing:0">(como chegou)</span></label><select id="av-origem">'+origOpts+'</select></div>'
+    +'<div class="fg" id="av-indicado-wrap" style="display:none"><label>Indicado por</label><input type="text" id="av-indicado" placeholder="Nome de quem indicou"></div>'
+    +'<div class="fg"><label>Doutora</label><select id="av-dr">'
+    +'<option value="neia"'+(defaultDr==='neia'?' selected':'')+'>Dra. Néia</option>'
+    +'<option value="dany"'+(defaultDr==='dany'?' selected':'')+'>Dra. Dany</option>'
+    +'</select></div>'
+    +'<div class="fg"><label>Data e hora *</label><input type="datetime-local" id="av-dt"></div>'
+    +'<div class="fg"><label>Valor <span style="font-weight:400;color:var(--gray);text-transform:none;letter-spacing:0">(opcional — vazio = cortesia)</span></label><input type="number" id="av-val" step="0.01" min="0" placeholder="0,00"></div>'
+    +'<div class="pf-actions">'
+    +'<button class="btn btn-sec" id="btn-av-cancelar">Cancelar</button>'
+    +'<button class="btn" id="btn-av-salvar">Salvar avaliação</button>'
+    +'</div>';
+}
+
+async function salvarAvaliacao(){
+  var nome=(document.getElementById('av-nome').value||'').trim();
+  if(!nome){ showToast('Informe o nome.',true); return; }
+  var dt=document.getElementById('av-dt').value;
+  if(!dt){ showToast('Informe data e hora.',true); return; }
+  var origem=document.getElementById('av-origem').value||null;
+  var indicado=(origem==='indicacao')?((document.getElementById('av-indicado').value||'').trim()||null):null;
+  var dr=document.getElementById('av-dr').value;
+  var tel=(document.getElementById('av-tel').value||'').trim()||null;
+  var valTxt=document.getElementById('av-val').value;
+  var valor=valTxt!==''?parseFloat(valTxt):null; if(valor!=null && (isNaN(valor)||valor<0)) valor=null;
+  var registro={ nome:nome, telefone:tel, origem:origem, indicado_por:indicado, doutora:dr, data_hora:new Date(dt).toISOString(), valor:valor, status:'agendada' };
+  var btn=document.getElementById('btn-av-salvar'); if(btn){ btn.disabled=true; btn.textContent='Salvando…'; }
+  try{
+    var res=await sb.from('nd_avaliacoes').insert(registro).select().single();
+    if(res.error) throw new Error(res.error.message);
+    S.AVAL.push(res.data);
+    S.atView=null;
+    showToast('Avaliação agendada.');
+    render();
+  }catch(e){ console.error('Erro salvar avaliacao:',e); showToast('Erro: '+e.message,true); if(btn){ btn.disabled=false; btn.textContent='Salvar avaliação'; } }
+}
+
+async function mudarStatusAvaliacao(id,status){
+  try{
+    var res=await sb.from('nd_avaliacoes').update({status:status}).eq('id',id).select().single();
+    if(res.error) throw new Error(res.error.message);
+    for(var i=0;i<S.AVAL.length;i++) if(S.AVAL[i].id===id){ S.AVAL[i]=res.data; break; }
+    showToast('Avaliação: '+avalStatusLabel(status));
+    render();
+  }catch(e){ console.error('Erro status avaliacao:',e); showToast('Erro: '+e.message,true); }
+}
+
+async function excluirAvaliacao(id){
+  if(!confirm('Remover esta avaliação?\n\nSoft-delete: pode ser recuperada pelo Fábio.')) return;
+  try{
+    var res=await sb.from('nd_avaliacoes').update({ excluido:true, excluido_em:new Date().toISOString(), excluido_por:S.user.email }).eq('id',id);
+    if(res.error) throw new Error(res.error.message);
+    S.AVAL=S.AVAL.filter(function(v){return v.id!==id});
+    showToast('Avaliação removida.');
+    render();
+  }catch(e){ console.error('Erro remover avaliacao:',e); showToast('Erro: '+e.message,true); }
+}
+
 function renderFormAtendimento(){
   var ed = S.atEdit;
   var defaultDr = ed ? (ed.doutora||'neia') : (S.user.role==='dany' ? 'dany' : 'neia');
@@ -1466,6 +1590,7 @@ function renderFormAtendimento(){
     +'<input type="number" id="at-rep-qtd" value="8" min="2" max="52" step="1"></div>'
   );
   return '<p class="stt">'+(ed?'Editar atendimento':'Novo atendimento')+'</p>'
+    +(ed ? '' : novoToggle('atend'))
     +'<div class="fg"><label>Paciente *</label>'
     +'<input type="text" id="at-pac-busca" placeholder="🔍 Buscar paciente…" style="margin-bottom:6px">'
     +'<select id="at-pac">'+opts+'</select></div>'
@@ -2052,6 +2177,33 @@ function bindApp(){
       excluirSerie(b.dataset.atDelserie, b.dataset.atFrom);
     });})(atDelSeries[ds]);
   }
+
+  // ── Avaliações (leads) — Parte A ──
+  var btnNovoAtend=document.getElementById('btn-novo-atend');
+  if(btnNovoAtend)btnNovoAtend.addEventListener('click',function(){ S.atEdit=null; S.atView='form'; render(); });
+  var btnNovoAval=document.getElementById('btn-novo-aval');
+  if(btnNovoAval)btnNovoAval.addEventListener('click',function(){ S.atView='aval'; render(); });
+  var avOrigem=document.getElementById('av-origem');
+  if(avOrigem)avOrigem.addEventListener('change',function(e){
+    var w=document.getElementById('av-indicado-wrap');
+    if(w) w.style.display = (e.target.value==='indicacao') ? '' : 'none';
+  });
+  var btnAvSalvar=document.getElementById('btn-av-salvar');
+  if(btnAvSalvar)btnAvSalvar.addEventListener('click',salvarAvaliacao);
+  var btnAvCancelar=document.getElementById('btn-av-cancelar');
+  if(btnAvCancelar)btnAvCancelar.addEventListener('click',function(){ S.atView=null; render(); });
+  var avSts=document.querySelectorAll('[data-av-st]');
+  for(var avs=0;avs<avSts.length;avs++){
+    (function(b){b.addEventListener('click',function(){
+      mudarStatusAvaliacao(parseInt(b.dataset.avId,10), b.dataset.avSt);
+    });})(avSts[avs]);
+  }
+  var avDels=document.querySelectorAll('[data-av-del]');
+  for(var avd=0;avd<avDels.length;avd++){
+    (function(b){b.addEventListener('click',function(){
+      excluirAvaliacao(parseInt(b.dataset.avDel,10));
+    });})(avDels[avd]);
+  }
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -2100,7 +2252,7 @@ async function sair(){
   S.user = null;
   S.ready = false;
   S.tab = 'dashboard';
-  S.META = null; S.MAIO = null; S.HIST = []; S.LANC = []; S.PACIENTES = []; S.ATEND = []; S.PAC_NOMES = {};
+  S.META = null; S.MAIO = null; S.HIST = []; S.LANC = []; S.PACIENTES = []; S.ATEND = []; S.AVAL = []; S.PAC_NOMES = {};
   S.semOffset = 0; S.atView = null; S.atEdit = null; S.caixaEdit = false;
   render();
 }
