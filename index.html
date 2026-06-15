@@ -300,6 +300,10 @@ html,body{height:100%;background:#E8E5DE;font-family:'DM Sans',sans-serif}
 .aud-mes:first-of-type{border-top:none;padding-top:0;margin-top:6px}
 .cat-chip{display:inline-block;font-size:10px;font-weight:600;padding:2px 8px;border-radius:20px;background:#E8EEF6;color:var(--neia-d);margin-top:5px}
 .cat-chip.vazio{background:var(--amber);color:var(--navy)}
+.pac-busca-wrap{position:relative;margin-bottom:12px}
+.pac-busca-ico{position:absolute;left:13px;top:50%;transform:translateY(-50%);font-size:14px;opacity:.55;pointer-events:none}
+.pac-busca{width:100%;padding:12px 14px 12px 38px;border:1.5px solid #E0DDD6;border-radius:var(--r2);font-family:'DM Sans',sans-serif;font-size:14px;color:var(--navy);background:var(--cream);outline:none}
+.pac-busca:focus{border-color:var(--amber);box-shadow:0 0 0 3px rgba(232,160,32,.12)}
 </style>
 </head>
 <body>
@@ -911,6 +915,10 @@ function renderPacientes(){
     +'<button class="pac-add" id="btn-pac-novo">+ Novo</button>'
     +'</div>';
 
+  // Lupa de busca por nome (filtra via DOM no bindApp, sem re-render)
+  html += '<div class="pac-busca-wrap"><span class="pac-busca-ico">🔍</span>'
+    +'<input type="text" id="pac-busca" class="pac-busca" placeholder="Buscar paciente pelo nome…" value="'+escapeHtml(S.pacBusca||'')+'"></div>';
+
   // Aviso de pacientes a validar (se houver)
   if(nAval>0 && filtro==='todos'){
     html += '<div class="pac-vf">⚠️ '+nAval+' paciente'+(nAval>1?'s':'')+' aguardando validação dos dados.</div>';
@@ -952,6 +960,35 @@ var CATEGORIAS=[
 ];
 function categoriaLabel(c){ for(var i=0;i<CATEGORIAS.length;i++) if(CATEGORIAS[i].id===c) return CATEGORIAS[i].l; return c||''; }
 
+// Origem de captação do paciente (banco já tem a coluna). "Indicado por" só quando origem='indicacao'.
+var ORIGENS=[
+  {id:'indicacao',         l:'Indicação'},
+  {id:'instagram',         l:'Instagram'},
+  {id:'marketing',         l:'Marketing / Tráfego pago'},
+  {id:'google',            l:'Google'},
+  {id:'convenio_parceria', l:'Convênio / Parceria'},
+  {id:'outros',            l:'Outros'}
+];
+// Normaliza texto para busca: sem acento, minúsculas
+function normTxt(s){ return String(s||'').normalize('NFD').replace(/[̀-ͯ]/g,'').toLowerCase(); }
+// Filtra os cards da lista de pacientes pelo campo de busca, sem re-render (preserva o foco)
+function filtrarPacientesDOM(){
+  var inp=document.getElementById('pac-busca'); if(!inp) return;
+  var q=normTxt(inp.value);
+  var cards=document.querySelectorAll('.pac[data-busca]');
+  for(var i=0;i<cards.length;i++){
+    var match = !q || cards[i].getAttribute('data-busca').indexOf(q)>=0;
+    cards[i].style.display = match ? '' : 'none';
+  }
+  // esconde o grupo (Néia/Dany) que ficou sem nenhum card visível
+  var grps=document.querySelectorAll('.pac-grp');
+  for(var g=0;g<grps.length;g++){
+    var any=false, vis=grps[g].querySelectorAll('.pac[data-busca]');
+    for(var v=0;v<vis.length;v++){ if(vis[v].style.display!=='none'){ any=true; break; } }
+    grps[g].style.display = any ? '' : 'none';
+  }
+}
+
 function renderPacienteCard(p){
   var valorTxt = p.valor_padrao ? fmt(Number(p.valor_padrao)) : '—';
   var freqTxt = freqLabel(p.frequencia);
@@ -965,7 +1002,7 @@ function renderPacienteCard(p){
   if(p.pagador_1){
     pagadorTxt = '<div style="font-size:11px;color:var(--gray);margin-top:2px;margin-bottom:3px;font-style:italic">💳 Pagador: '+escapeHtml(p.pagador_1)+(p.pagador_2?' / '+escapeHtml(p.pagador_2):'')+'</div>';
   }
-  return '<div class="pac '+p.doutora+'" data-pac="'+p.id+'">'
+  return '<div class="pac '+p.doutora+'" data-pac="'+p.id+'" data-busca="'+escapeHtml(normTxt(p.nome))+'">'
     +'<div class="pac-info">'
     +'<div class="pac-nome">'+escapeHtml(p.nome)+'</div>'
     +pagadorTxt
@@ -1013,6 +1050,16 @@ function renderFormPaciente(){
   for(var ci=0;ci<CATEGORIAS.length;ci++){ catOpts += '<option value="'+CATEGORIAS[ci].id+'"'+(cat===CATEGORIAS[ci].id?' selected':'')+'>'+CATEGORIAS[ci].l+'</option>'; }
   html += '<div class="fg"><label>Categoria *'+(!cat?' <span style="font-weight:400;color:var(--amber);text-transform:none;letter-spacing:0">— classificar</span>':'')+'</label>'
     +'<select id="pf-categoria"'+(!cat?' style="border-color:var(--amber);background:#FFFBF0"':'')+'>'+catOpts+'</select></div>';
+
+  // Origem de captação (recomendada, NÃO bloqueante). "Indicado por" só quando origem='indicacao'.
+  var orig = f.origem || '';
+  var origOpts = '<option value="">Selecione…</option>';
+  for(var oi=0;oi<ORIGENS.length;oi++){ origOpts += '<option value="'+ORIGENS[oi].id+'"'+(orig===ORIGENS[oi].id?' selected':'')+'>'+ORIGENS[oi].l+'</option>'; }
+  html += '<div class="fg"><label>Origem <span style="font-weight:400;color:var(--gray);text-transform:none;letter-spacing:0">(como chegou)</span></label>'
+    +'<select id="pf-origem">'+origOpts+'</select></div>';
+  html += '<div class="fg" id="pf-indicado-wrap" style="'+(orig==='indicacao'?'':'display:none')+'">'
+    +'<label>Indicado por</label>'
+    +'<input type="text" id="pf-indicado" value="'+escapeHtml(f.indicado_por||'')+'" placeholder="Nome de quem indicou"></div>';
 
   // Pagadores — usados quando paciente é criança/dependente
   // Quando vazios: paciente é o próprio pagador
@@ -1110,6 +1157,10 @@ async function salvarPaciente(){
   var pag1 = (document.getElementById('pf-pag1').value||'').trim() || null;
   var pag2 = (document.getElementById('pf-pag2').value||'').trim() || null;
 
+  // Origem de captação
+  var origem = document.getElementById('pf-origem').value || null;
+  var indicadoPor = (origem==='indicacao') ? ((document.getElementById('pf-indicado').value||'').trim() || null) : null;
+
   // Dados para NF
   var cpf = (document.getElementById('pf-cpf').value||'').trim() || null;
   var rg = (document.getElementById('pf-rg').value||'').trim() || null;
@@ -1141,6 +1192,8 @@ async function salvarPaciente(){
     end_uf: endUf,
     end_cep: endCep,
     categoria: categoria,
+    origem: origem,
+    indicado_por: indicadoPor,
     criado_por: S.user.name
   };
 
@@ -1397,7 +1450,7 @@ function renderFormAtendimento(){
   for(var i=0;i<S.PACIENTES.length;i++){
     var p=S.PACIENTES[i];
     var selp = (ed && ed.paciente_id===p.id) ? ' selected' : '';
-    opts+='<option value="'+p.id+'" data-dr="'+(p.doutora||'')+'" data-valor="'+(p.valor_padrao!=null?p.valor_padrao:'')+'"'+selp+'>'+escapeHtml(p.nome)+'</option>';
+    opts+='<option value="'+p.id+'" data-dr="'+(p.doutora||'')+'" data-valor="'+(p.valor_padrao!=null?p.valor_padrao:'')+'" data-busca="'+escapeHtml(normTxt(p.nome))+'"'+selp+'>'+escapeHtml(p.nome)+'</option>';
   }
   var dtVal = ed ? isoToLocalInput(ed.data_hora) : '';
   var valVal = (ed && ed.valor!=null) ? ed.valor : '';
@@ -1413,7 +1466,9 @@ function renderFormAtendimento(){
     +'<input type="number" id="at-rep-qtd" value="8" min="2" max="52" step="1"></div>'
   );
   return '<p class="stt">'+(ed?'Editar atendimento':'Novo atendimento')+'</p>'
-    +'<div class="fg"><label>Paciente *</label><select id="at-pac">'+opts+'</select></div>'
+    +'<div class="fg"><label>Paciente *</label>'
+    +'<input type="text" id="at-pac-busca" placeholder="🔍 Buscar paciente…" style="margin-bottom:6px">'
+    +'<select id="at-pac">'+opts+'</select></div>'
     +'<div class="fg"><label>Data e hora *</label><input type="datetime-local" id="at-dt" value="'+dtVal+'"></div>'
     +'<div class="fg"><label>Doutora</label><select id="at-dr">'
     +'<option value="neia"'+(defaultDr==='neia'?' selected':'')+'>Dra. Néia</option>'
@@ -1891,6 +1946,8 @@ function bindApp(){
   for(var fb=0;fb<fbs.length;fb++){
     (function(b){b.addEventListener('click',function(){S.pacFiltro=b.dataset.fp;render();});})(fbs[fb]);
   }
+  var pacBusca=document.getElementById('pac-busca');
+  if(pacBusca){ pacBusca.addEventListener('input',function(e){ S.pacBusca=e.target.value; filtrarPacientesDOM(); }); filtrarPacientesDOM(); }
   var sts=document.querySelectorAll('[data-st]');
   for(var st=0;st<sts.length;st++){
     (function(b){b.addEventListener('click',function(){
@@ -1905,6 +1962,11 @@ function bindApp(){
     if(w) w.style.display = (e.target.value==='outra') ? '' : 'none';
     if(!S.pacForm)S.pacForm={};
     S.pacForm.frequencia=e.target.value;
+  });
+  var pfOrigem=document.getElementById('pf-origem');
+  if(pfOrigem)pfOrigem.addEventListener('change',function(e){
+    var w=document.getElementById('pf-indicado-wrap');
+    if(w) w.style.display = (e.target.value==='indicacao') ? '' : 'none';
   });
   var btnPfCancelar=document.getElementById('btn-pf-cancelar');
   if(btnPfCancelar)btnPfCancelar.addEventListener('click',function(){
@@ -1950,6 +2012,16 @@ function bindApp(){
     // Pré-preenche o valor com o valor_padrao do paciente (editável)
     var vv=opt?opt.getAttribute('data-valor'):'';
     var vi=document.getElementById('at-val'); if(vi && vv) vi.value=vv;
+  });
+  var atPacBusca=document.getElementById('at-pac-busca');
+  if(atPacBusca)atPacBusca.addEventListener('input',function(e){
+    var q=normTxt(e.target.value);
+    var sel=document.getElementById('at-pac'); if(!sel) return;
+    for(var i=0;i<sel.options.length;i++){
+      var o=sel.options[i], b=o.getAttribute('data-busca');
+      if(b===null) continue; // a opção "Selecione…" não tem data-busca
+      o.hidden = !!(q && b.indexOf(q)<0);
+    }
   });
   var atRep=document.getElementById('at-rep');
   if(atRep)atRep.addEventListener('change',function(e){
