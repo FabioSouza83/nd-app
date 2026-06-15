@@ -211,6 +211,12 @@ html,body{height:100%;background:#E8E5DE;font-family:'DM Sans',sans-serif}
 .at-card.dany{border-left-color:var(--dany-d)}
 .at-card.aval{border-left-color:#7C5CBF;background:#FBF9FF}
 .av-tag{display:inline-flex;align-items:center;font-size:10px;font-weight:700;padding:2px 8px;border-radius:20px;background:#EDE6FA;color:#5B3D9E;white-space:nowrap;flex-shrink:0}
+.av-conv{display:flex;gap:6px;margin-top:9px}
+.av-conv-btn{flex:1;background:#5B3D9E;color:white;border:none;border-radius:20px;padding:7px 12px;font-size:11px;font-weight:700;cursor:pointer}
+.av-conv-no{background:white;border:1px solid #E0DDD6;border-radius:20px;padding:7px 12px;font-size:11px;font-weight:600;color:var(--gray);cursor:pointer;white-space:nowrap}
+.av-conv-done{margin-top:9px;font-size:11px;font-weight:700;padding:6px 10px;border-radius:8px;text-align:center}
+.av-conv-done.ok{background:rgba(31,92,31,.1);color:var(--green)}
+.av-conv-done.no{background:#F0EDE8;color:var(--gray)}
 .at-top{display:flex;align-items:center;gap:9px}
 .at-hora{font-family:'DM Serif Display',serif;font-size:15px;color:var(--navy);min-width:46px}
 .at-nome{font-size:13px;font-weight:600;color:var(--navy);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -1219,7 +1225,13 @@ async function salvarPaciente(){
       S.PACIENTES.push(res2.data);
       // Reordena
       S.PACIENTES.sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'')});
-      showToast('Paciente cadastrado.');
+      // Conversão de avaliação (Parte B): vincula o paciente e marca a avaliação como convertida
+      if(f._fromAval){
+        var avc = await sb.from('nd_avaliacoes').update({status:'convertida', paciente_id:res2.data.id}).eq('id',f._fromAval).select().single();
+        if(avc.error){ console.error('Erro vincular avaliacao:', avc.error); }
+        else { for(var ai=0;ai<S.AVAL.length;ai++) if(S.AVAL[ai].id===f._fromAval){ S.AVAL[ai]=avc.data; break; } }
+      }
+      showToast(f._fromAval ? 'Avaliação convertida em paciente ✅' : 'Paciente cadastrado.');
     }
     S.pacForm = null;
     S.view = null;
@@ -1484,6 +1496,16 @@ function renderAvalCard(v){
     acts+='<button class="at-act'+(v.status===st.id?' on':'')+'" data-av-st="'+st.id+'" data-av-id="'+v.id+'">'+st.l+'</button>';
   }
   var valTxt = (v.valor!=null) ? fmt(Number(v.valor)) : 'cortesia';
+  // Conversão (Parte B): só quando a avaliação foi 'realizada'; mostra o resultado se já convertida/não
+  var convBlock='';
+  if(v.status==='realizada'){
+    convBlock='<div class="av-conv"><button class="av-conv-btn" data-av-conv="'+v.id+'">➡️ Converter em paciente</button>'
+      +'<button class="av-conv-no" data-av-naoconv="'+v.id+'">Não converteu</button></div>';
+  } else if(v.status==='convertida'){
+    convBlock='<div class="av-conv-done ok">✅ Convertida em paciente</div>';
+  } else if(v.status==='nao_convertida'){
+    convBlock='<div class="av-conv-done no">✗ Lead não convertido</div>';
+  }
   return '<div class="at-card aval '+dr+'">'
     +'<div class="at-top">'
     +'<span class="at-hora">'+fmtHora(v.data_hora)+'</span>'
@@ -1497,6 +1519,7 @@ function renderAvalCard(v){
       +(v.origem?'<span style="color:var(--gray)"> · '+escapeHtml(origemLabel(v.origem))+'</span>':'')
       +'</div>'
     +'<div class="at-actions">'+acts+'</div>'
+    +convBlock
     +'</div>';
 }
 
@@ -1565,6 +1588,38 @@ async function excluirAvaliacao(id){
     showToast('Avaliação removida.');
     render();
   }catch(e){ console.error('Erro remover avaliacao:',e); showToast('Erro: '+e.message,true); }
+}
+
+// Parte B: abre o cadastro de paciente pré-preenchido com os dados da avaliação.
+// _fromAval marca que, ao salvar, a avaliação deve virar 'convertida' com o paciente_id.
+function converterAvaliacao(id){
+  var v=null; for(var i=0;i<S.AVAL.length;i++) if(S.AVAL[i].id===id){ v=S.AVAL[i]; break; }
+  if(!v) return;
+  S.pacForm = {
+    nome: v.nome,
+    telefone: v.telefone,
+    origem: v.origem,
+    indicado_por: v.indicado_por,
+    doutora: v.doutora||'neia',
+    status: 'ativo',
+    frequencia: '1x_semana',
+    _fromAval: v.id
+  };
+  S.atView=null;
+  S.view='pacForm';
+  S.tab='pacientes';
+  render();
+}
+
+async function marcarNaoConvertida(id){
+  if(!confirm('Marcar este lead como NÃO convertido (não virou paciente)?')) return;
+  try{
+    var res=await sb.from('nd_avaliacoes').update({status:'nao_convertida'}).eq('id',id).select().single();
+    if(res.error) throw new Error(res.error.message);
+    for(var i=0;i<S.AVAL.length;i++) if(S.AVAL[i].id===id){ S.AVAL[i]=res.data; break; }
+    showToast('Lead marcado como não convertido.');
+    render();
+  }catch(e){ console.error('Erro nao convertida:',e); showToast('Erro: '+e.message,true); }
 }
 
 function renderFormAtendimento(){
@@ -2203,6 +2258,14 @@ function bindApp(){
     (function(b){b.addEventListener('click',function(){
       excluirAvaliacao(parseInt(b.dataset.avDel,10));
     });})(avDels[avd]);
+  }
+  var avConvs=document.querySelectorAll('[data-av-conv]');
+  for(var avc=0;avc<avConvs.length;avc++){
+    (function(b){b.addEventListener('click',function(){ converterAvaliacao(parseInt(b.dataset.avConv,10)); });})(avConvs[avc]);
+  }
+  var avNaoConvs=document.querySelectorAll('[data-av-naoconv]');
+  for(var anc=0;anc<avNaoConvs.length;anc++){
+    (function(b){b.addEventListener('click',function(){ marcarNaoConvertida(parseInt(b.dataset.avNaoconv,10)); });})(avNaoConvs[anc]);
   }
 }
 
