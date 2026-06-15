@@ -228,7 +228,7 @@ html,body{height:100%;background:#E8E5DE;font-family:'DM Sans',sans-serif}
 .av-conv-done.no{background:#F0EDE8;color:var(--gray)}
 .at-top{display:flex;align-items:center;gap:9px}
 .at-hora{font-family:'DM Serif Display',serif;font-size:15px;color:var(--navy);min-width:46px}
-.at-nome{font-size:13px;font-weight:600;color:var(--navy);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.at-nome{font-size:14px;font-weight:700;color:var(--navy);flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .at-serie{font-size:11px;margin-left:5px}
 .at-del{background:none;border:none;cursor:pointer;font-size:13px;opacity:.55;flex-shrink:0;padding:0 2px}
 .at-del:hover{opacity:1}
@@ -1489,12 +1489,10 @@ function renderAtendCard(a){
     +'<div class="at-top">'
     +'<span class="at-hora">'+fmtHora(a.data_hora)+'</span>'
     +'<span class="at-nome">'+escapeHtml(pacNome(a.paciente_id))+serie+'</span>'
-    +'<span class="at-chip '+statusAtendClass(a.status)+'">'+statusAtendLabel(a.status)+'</span>'
     +'<button class="at-del" data-at-edit="'+a.id+'" title="Editar">✏️</button>'
     +btnSerie
     +'<button class="at-del" data-at-del="'+a.id+'" title="Remover só este">🗑️</button>'
     +'</div>'
-    +'<div style="font-size:11px;font-weight:600;margin-top:3px;'+drColor+'">'+drLabel(dr)+(a.valor!=null?'<span style="color:var(--gray)"> · '+fmt(Number(a.valor))+'</span>':'')+'</div>'
     +'<div class="at-actions">'+acts+'</div>'
     +'</div>';
 }
