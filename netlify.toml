@@ -1,0 +1,5 @@
+# Deploy do app ND (HTML estático único na raiz do repo).
+# Sem etapa de build: o Netlify só publica os arquivos como estão.
+# Usado quando o site nd-financeiro estiver ligado a este repositório (deploy automático no push da main).
+[build]
+  publish = "."
