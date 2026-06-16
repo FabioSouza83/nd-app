@@ -215,6 +215,10 @@ html,body{height:100%;background:#E8E5DE;font-family:'DM Sans',sans-serif}
 .at-day{margin-bottom:16px}
 .at-day-tt{font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.8px;margin:0 0 8px 4px}
 .at-day-empty{font-size:12px;color:#BBB;padding:2px 4px 6px;font-style:italic}
+/* Privacidade: horário da OUTRA Dra aparece só como bloco neutro "Ocupado" (sem nome/valor/status/ações) */
+.at-ocupado{display:flex;align-items:center;gap:8px;background:#F2F0EC;border:1px dashed #D6D2CA;border-radius:var(--r2);padding:8px 11px;margin-bottom:8px;opacity:.75}
+.at-ocupado .at-hora{font-size:13px;color:var(--gray);min-width:38px}
+.at-ocupado-l{font-size:11px;font-weight:600;color:#9A958C;text-transform:uppercase;letter-spacing:.4px}
 .at-card{background:white;border-radius:var(--r2);padding:11px 13px;margin-bottom:8px;box-shadow:0 2px 8px rgba(27,42,74,.06);border-left:3px solid #E0DDD6}
 .at-card.neia{border-left-color:var(--neia-d)}
 .at-card.dany{border-left-color:var(--dany-d)}
@@ -367,6 +371,9 @@ var RESERVA_MIN = 1000.00;
 // ═══════════════════════════════════════════════════════════════
 var S = {
   user: null,           // { email, name, role }
+  papel: null,          // papel real vindo do banco: 'admin' | 'dra' | 'secretaria'
+  doutoraAtual: null,   // doutora do usuário logado: 'neia' | 'dany' | null
+  AGDISP: [],           // janela de disponibilidade (nd_agenda_disponibilidade): {doutora, data_hora, situacao}
   ready: false,         // true depois de carregar dados do Supabase
   loading: true,        // splash inicial
   tab: 'dashboard',
@@ -452,6 +459,23 @@ async function carregarDados(){
     // Mapa id->nome de TODOS os pacientes (inclui excluídos) para a agenda não perder o nome
     S.PAC_NOMES = {};
     if(pacAll.data) for(var pn=0;pn<pacAll.data.length;pn++) S.PAC_NOMES[pacAll.data[pn].id]=pacAll.data[pn].nome;
+
+    // Privacidade da agenda: papel/doutora reais (banco) + janela de disponibilidade da outra Dra.
+    // Não-fatal: se algo falhar, cai no fallback por S.user.role e a agenda segue funcionando.
+    try {
+      var [papelR, drR, dispR] = await Promise.all([
+        sb.rpc('nd_papel_atual'),
+        sb.rpc('nd_doutora_atual'),
+        sb.from('nd_agenda_disponibilidade').select('doutora,data_hora,situacao')
+      ]);
+      S.papel = papelR.error ? null : papelR.data;
+      S.doutoraAtual = drR.error ? null : drR.data;
+      S.AGDISP = (dispR.error || !dispR.data) ? [] : dispR.data;
+    } catch(e){
+      console.warn('Privacidade da agenda indisponível, usando fallback por papel.', e);
+      S.papel = null; S.doutoraAtual = null; S.AGDISP = [];
+    }
+
     S.ready = true;
     return true;
   } catch(e){
@@ -1339,19 +1363,45 @@ function renderAtendimentos(){
   var FATURAVEL={agendado:1, realizado:1, falta_faturada:1};
   function diaIdx(iso){ var d=new Date(iso); var dMid=new Date(d.getFullYear(),d.getMonth(),d.getDate()); return Math.round((dMid-ws)/86400000); }
 
+  // Privacidade: admin (Fábio) vê tudo; cada Dra vê a PRÓPRIA coluna completa e a da outra só como "Ocupado".
+  // Papel/doutora vêm do banco (RPC); se indisponíveis, usa fallback por S.user.role.
+  var papel = S.papel || (S.user && S.user.role==='fabio' ? 'admin' : 'dra');
+  var minhaDra = S.doutoraAtual || (S.user && S.user.role==='dany' ? 'dany' : (S.user && S.user.role==='neia' ? 'neia' : null));
+  var isAdmin = (papel === 'admin');
+  // Coluna "cheia" = mostra conteúdo real. Admin: as duas. Dra: só a sua. Outros: nenhuma (só disponibilidade).
+  function colCheia(dr){ return isAdmin || dr === minhaDra; }
+
   // Agrupa por dia E por doutora (coluna Dany | coluna Néia)
   var dias=[]; for(var d6=0;d6<6;d6++) dias.push({neia:[], dany:[]});
+  var disp=[]; for(var d7=0;d7<6;d7++) disp.push({neia:[], dany:[]}); // janela "Ocupado" da outra Dra
   var previsto=0, total=0;
   for(var i=0;i<S.ATEND.length;i++){
     var a=S.ATEND[i]; var diff=diaIdx(a.data_hora);
-    if(diff>=0 && diff<=5){ var dr=(a.doutora==='dany')?'dany':'neia'; dias[diff][dr].push({tipo:'atend', dh:a.data_hora, obj:a}); total++; if(FATURAVEL[a.status] && a.valor!=null) previsto+=Number(a.valor); }
+    if(diff<0||diff>5) continue;
+    var dr=(a.doutora==='dany')?'dany':'neia';
+    if(!colCheia(dr)) continue; // a coluna da outra Dra é renderizada via disponibilidade, não pelo conteúdo
+    dias[diff][dr].push({tipo:'atend', dh:a.data_hora, obj:a}); total++;
+    if(FATURAVEL[a.status] && a.valor!=null) previsto+=Number(a.valor);
   }
   for(var av=0;av<S.AVAL.length;av++){
     var vv=S.AVAL[av]; var diffA=diaIdx(vv.data_hora);
-    if(diffA>=0 && diffA<=5){ var drv=(vv.doutora==='dany')?'dany':'neia'; dias[diffA][drv].push({tipo:'aval', dh:vv.data_hora, obj:vv}); total++; }
+    if(diffA<0||diffA>5) continue;
+    var drv=(vv.doutora==='dany')?'dany':'neia';
+    if(!colCheia(drv)) continue;
+    dias[diffA][drv].push({tipo:'aval', dh:vv.data_hora, obj:vv}); total++;
+  }
+  // Disponibilidade: só alimenta as colunas que o usuário NÃO pode ver completas (a da outra Dra)
+  if(!isAdmin){
+    for(var dz=0;dz<S.AGDISP.length;dz++){
+      var od=S.AGDISP[dz]; var diffD=diaIdx(od.data_hora);
+      if(diffD<0||diffD>5) continue;
+      var drd=(od.doutora==='dany')?'dany':'neia';
+      if(colCheia(drd)) continue; // minha própria coluna já vem completa pelo conteúdo
+      disp[diffD][drd].push({dh:od.data_hora}); total++;
+    }
   }
   function srt(arr){ arr.sort(function(x,y){return new Date(x.dh)-new Date(y.dh)}); }
-  for(var z=0;z<6;z++){ srt(dias[z].dany); srt(dias[z].neia); }
+  for(var z=0;z<6;z++){ srt(dias[z].dany); srt(dias[z].neia); srt(disp[z].dany); srt(disp[z].neia); }
 
   var lblIni=pad2(ws.getDate())+'/'+pad2(ws.getMonth()+1);
   var lblFim=pad2(fim.getDate())+'/'+pad2(fim.getMonth()+1);
@@ -1363,6 +1413,13 @@ function renderAtendimentos(){
     if(arr.length===0) return '<div class="at-day-empty">—</div>';
     var s=''; for(var j=0;j<arr.length;j++){ var it=arr[j]; s += (it.tipo==='aval') ? renderAvalCard(it.obj) : renderAtendCard(it.obj); } return s;
   }
+  // Coluna da outra Dra: só o horário + "Ocupado". Sem nome, valor, status, botões ou lixeira.
+  function renderDisp(arr){
+    if(arr.length===0) return '<div class="at-day-empty">—</div>';
+    var s=''; for(var j=0;j<arr.length;j++){ s += '<div class="at-ocupado"><span class="at-hora">'+fmtHora(arr[j].dh)+'</span><span class="at-ocupado-l">Ocupado</span></div>'; } return s;
+  }
+  // Decide, por coluna, entre conteúdo completo (própria/admin) e janela de disponibilidade (a outra Dra)
+  function renderCol(dr, k){ return colCheia(dr) ? renderItens(dias[k][dr]) : renderDisp(disp[k][dr]); }
 
   var html='<p class="stt">Atendimentos</p>'
     +atToggle('agenda')
@@ -1388,11 +1445,11 @@ function renderAtendimentos(){
     html+='<div class="at-day"><p class="at-day-tt">'+DIAS_SEM[k]+' · '+pad2(dd.getDate())+'/'+pad2(dd.getMonth()+1)+'</p>';
     if(col==='ambas'){
       html+='<div class="ag2-grid">'
-        +'<div class="ag2-col"><div class="ag2-col-h dany">Dany</div>'+renderItens(dias[k].dany)+'</div>'
-        +'<div class="ag2-col"><div class="ag2-col-h neia">Néia</div>'+renderItens(dias[k].neia)+'</div>'
+        +'<div class="ag2-col"><div class="ag2-col-h dany">Dany</div>'+renderCol('dany',k)+'</div>'
+        +'<div class="ag2-col"><div class="ag2-col-h neia">Néia</div>'+renderCol('neia',k)+'</div>'
         +'</div>';
     } else {
-      html+=renderItens(dias[k][col]);
+      html+=renderCol(col,k);
     }
     html+='</div>';
   }
@@ -2352,6 +2409,7 @@ async function sair(){
   S.ready = false;
   S.tab = 'dashboard';
   S.META = null; S.MAIO = null; S.HIST = []; S.LANC = []; S.PACIENTES = []; S.ATEND = []; S.AVAL = []; S.PAC_NOMES = {};
+  S.papel = null; S.doutoraAtual = null; S.AGDISP = [];
   S.semOffset = 0; S.atView = null; S.atEdit = null; S.caixaEdit = false;
   render();
 }
