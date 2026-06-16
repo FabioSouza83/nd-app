@@ -212,6 +212,24 @@ html,body{height:100%;background:#E8E5DE;font-family:'DM Sans',sans-serif}
 .rec-conf{font-size:11px;color:var(--green)}
 .rec-prev{font-size:11px;color:var(--gray)}
 .rec-empty{font-size:12px;color:var(--gray);padding:6px 0}
+/* Recebíveis por categoria */
+.rec-grp-top{display:flex;justify-content:space-between;align-items:center;margin-bottom:2px}
+.rec-grp-tot{font-family:'DM Serif Display',serif;font-size:20px;font-weight:700;color:var(--green);line-height:1}
+.rec-cat-blk{border-radius:var(--r2);padding:11px 13px;margin-top:10px}
+.rec-cat-blk.pf{background:#FFF8E9;border:1.5px solid #F0D89A}
+.rec-cat-blk.pj{background:var(--cream);border:1px solid #E8E4DC}
+.rec-cat-blk.nula{background:var(--warn);border:1px solid #F0E0B0;padding:7px 13px}
+.rec-cat-h{font-size:11px;font-weight:700;color:var(--navy);text-transform:uppercase;letter-spacing:.4px;margin-bottom:6px}
+.rec-cat-blk.pf .rec-cat-h{color:#8A6D1A}
+.rec-cat-row{display:flex;justify-content:space-between;align-items:baseline;gap:10px;padding:5px 0;border-bottom:1px solid rgba(27,42,74,.05)}
+.rec-cat-row:last-child{border-bottom:none}
+.rec-cat-l{font-size:13px;color:var(--navy)}
+.rec-cat-vs{display:flex;align-items:baseline;gap:8px;flex-shrink:0}
+.rec-cat-fat{font-family:'DM Serif Display',serif;font-size:15px;font-weight:600;color:var(--navy)}
+.rec-cat-blk.pf .rec-cat-fat{color:#7A5C00}
+.rec-cat-prev{font-size:10px;color:var(--gray)}
+.rec-cat-sub{display:flex;justify-content:space-between;margin-top:7px;padding-top:7px;border-top:1.5px solid rgba(27,42,74,.1);font-size:12px;font-weight:700;color:var(--navy)}
+.rec-cat-row.sem-cat .rec-cat-l{color:#856404;font-weight:600}
 .at-day{margin-bottom:16px}
 .at-day-tt{font-size:11px;font-weight:700;color:var(--gray);text-transform:uppercase;letter-spacing:.8px;margin:0 0 8px 4px}
 .at-day-empty{font-size:12px;color:#BBB;padding:2px 4px 6px;font-style:italic}
@@ -365,6 +383,9 @@ var CATS = [
 ];
 var MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 var RESERVA_MIN = 1000.00;
+// Recebíveis por categoria (view nd_recebiveis). PF = dinheiro direto na conta da Dra; PJ = via empresa.
+var REC_CAT_PF = [{id:'particular_pf', l:'Particular PF'}, {id:'legado', l:'Legado'}];
+var REC_CAT_PJ = [{id:'particular_nf', l:'Particular com NF'}, {id:'clinica_nd', l:'Clínica ND'}];
 
 // ═══════════════════════════════════════════════════════════════
 // ESTADO GLOBAL
@@ -374,6 +395,8 @@ var S = {
   papel: null,          // papel real vindo do banco: 'admin' | 'dra' | 'secretaria'
   doutoraAtual: null,   // doutora do usuário logado: 'neia' | 'dany' | null
   AGDISP: [],           // janela de disponibilidade (nd_agenda_disponibilidade): {doutora, data_hora, situacao}
+  RECEB: [],            // faturamento por categoria (view privada nd_recebiveis)
+  recMesOffset: 0,      // navegação de mês na aba Recebíveis (0 = mês atual)
   ready: false,         // true depois de carregar dados do Supabase
   loading: true,        // splash inicial
   tab: 'dashboard',
@@ -463,17 +486,19 @@ async function carregarDados(){
     // Privacidade da agenda: papel/doutora reais (banco) + janela de disponibilidade da outra Dra.
     // Não-fatal: se algo falhar, cai no fallback por S.user.role e a agenda segue funcionando.
     try {
-      var [papelR, drR, dispR] = await Promise.all([
+      var [papelR, drR, dispR, recR] = await Promise.all([
         sb.rpc('nd_papel_atual'),
         sb.rpc('nd_doutora_atual'),
-        sb.from('nd_agenda_disponibilidade').select('doutora,data_hora,situacao')
+        sb.from('nd_agenda_disponibilidade').select('doutora,data_hora,situacao'),
+        sb.from('nd_recebiveis').select('*')
       ]);
       S.papel = papelR.error ? null : papelR.data;
       S.doutoraAtual = drR.error ? null : drR.data;
       S.AGDISP = (dispR.error || !dispR.data) ? [] : dispR.data;
+      S.RECEB = (recR.error || !recR.data) ? [] : recR.data;
     } catch(e){
       console.warn('Privacidade da agenda indisponível, usando fallback por papel.', e);
-      S.papel = null; S.doutoraAtual = null; S.AGDISP = [];
+      S.papel = null; S.doutoraAtual = null; S.AGDISP = []; S.RECEB = [];
     }
 
     S.ready = true;
@@ -1465,71 +1490,91 @@ function atToggle(active){
     +'</div>';
 }
 
-// Recebíveis / previsão de caixa: projeta a entrada de receita a partir dos atendimentos
-// faturáveis (agendado, realizado, falta faturada), agrupados por mês e SEMPRE individual por Dra.
-// "A receber" = serviço prestado ou falta cobrável (realizado, falta_faturada). "Previsto" = agendado.
-// Horizonte: do 1º dia do mês atual em diante (realizados do mês ainda contam como a receber).
+// Recebíveis: faturamento da pessoa logada, por categoria, no mês selecionado.
+// Lê da view PRIVADA nd_recebiveis — o banco já entrega só o que a pessoa pode ver
+// (cada Dra só os dela; admin as duas). Não filtramos por doutora no código.
 function renderRecebiveis(){
-  var FATURAVEL={agendado:1, realizado:1, falta_faturada:1};
-  var CONFIRMADO={realizado:1, falta_faturada:1};
   var now=new Date();
-  var floor=new Date(now.getFullYear(), now.getMonth(), 1); // 1º dia do mês atual, 00:00 local
-  var buckets={neia:{}, dany:{}};
-  for(var i=0;i<S.ATEND.length;i++){
-    var a=S.ATEND[i];
-    if(!FATURAVEL[a.status] || a.valor==null) continue;
-    var d=new Date(a.data_hora);
-    if(d<floor) continue;
-    var dr=(a.doutora==='dany')?'dany':'neia';
-    var mk=d.getFullYear()+'-'+pad2(d.getMonth()+1);
-    var b=buckets[dr][mk] || (buckets[dr][mk]={conf:0, prev:0, nConf:0, nPrev:0, mi:d.getMonth(), yr:d.getFullYear()});
-    var v=Number(a.valor);
-    if(CONFIRMADO[a.status]){ b.conf+=v; b.nConf++; } else { b.prev+=v; b.nPrev++; }
+  var off=S.recMesOffset||0;
+  var base=new Date(now.getFullYear(), now.getMonth()+off, 1);
+  var mesKey=base.getFullYear()+'-'+pad2(base.getMonth()+1);
+  var mesLbl=MESES[base.getMonth()]+' '+base.getFullYear();
+
+  // Linhas da view para o mês (coluna 'mes' = 1º dia do mês, 'YYYY-MM-DD')
+  var rows=(S.RECEB||[]).filter(function(r){ return String(r.mes||'').slice(0,7)===mesKey; });
+
+  // Agrupa por doutora -> categorias
+  var grupos={};
+  for(var i=0;i<rows.length;i++){
+    var r=rows[i]; var dr=(r.doutora==='dany')?'dany':'neia';
+    var g=grupos[dr] || (grupos[dr]={cats:{}, fat:0, prev:0});
+    var ck=r.categoria || '__nula__';
+    var c=g.cats[ck] || (g.cats[ck]={fat:0, prev:0, qf:0, qp:0});
+    c.fat+=Number(r.valor_faturado||0); c.prev+=Number(r.valor_previsto||0);
+    c.qf+=Number(r.qtd_faturada||0); c.qp+=Number(r.qtd_prevista||0);
+    g.fat+=Number(r.valor_faturado||0); g.prev+=Number(r.valor_previsto||0);
   }
+  var ordem=['neia','dany'].filter(function(x){ return grupos[x]; });
+  var totFat=0, totPrev=0;
+  for(var o=0;o<ordem.length;o++){ totFat+=grupos[ordem[o]].fat; totPrev+=grupos[ordem[o]].prev; }
 
-  // Totais por Dra
-  var tot=function(cls){ var c=0,p=0,mks=Object.keys(buckets[cls]); for(var k=0;k<mks.length;k++){ c+=buckets[cls][mks[k]].conf; p+=buckets[cls][mks[k]].prev; } return {conf:c, prev:p}; };
-  var tN=tot('neia'), tD=tot('dany');
+  var nav='<div class="at-week">'
+    +'<button class="at-wnav" id="btn-rec-prev">◀</button>'
+    +'<div><div class="at-wlbl">'+mesLbl+'</div><div class="at-wsub">Faturamento por categoria</div></div>'
+    +'<button class="at-wnav" id="btn-rec-next">▶</button>'
+    +'</div>'
+    +(off!==0?'<div style="margin-bottom:12px"><button class="pac-fbtn" id="btn-rec-hoje">Mês atual</button></div>':'');
 
-  var recCard=function(name,cls,t){
-    return '<div class="sc '+cls+'">'
-      +'<div class="sc-name '+cls+'">'+name+'</div>'
-      +'<div class="sc-line"><span class="sc-line-l">A receber</span><span class="sc-line-v">'+fmt(t.conf)+'</span></div>'
-      +'<div class="sc-line"><span class="sc-line-l">Previsto</span><span class="sc-line-v">'+fmt(t.prev)+'</span></div>'
-      +'<div class="sc-disp"><span class="sc-disp-l">Total projetado</span><span class="sc-disp-v">'+fmt(t.conf+t.prev)+'</span></div>'
-      +'</div>';
-  };
+  var hero='<div class="hero">'
+    +'<div class="hero-label">Faturado no mês'+(ordem.length>1?' · as duas Dras':'')+'</div>'
+    +'<div class="hero-tv">'+fmt(totFat)+'</div>'
+    +(totPrev>0?'<div class="hero-tl" style="margin-top:9px">+ '+fmt(totPrev)+' previsto (agendado)</div>':'')
+    +'</div>';
 
-  var detalheDra=function(name,cls,dcolor){
-    var mks=Object.keys(buckets[cls]).sort(); // 'YYYY-MM' ordena cronologicamente
-    var inner='';
-    if(mks.length===0){
-      inner='<div class="rec-empty">Sem recebíveis futuros.</div>';
-    } else {
-      for(var m=0;m<mks.length;m++){
-        var b=buckets[cls][mks[m]];
-        inner+='<div class="rec-m">'
-          +'<div class="rec-m-top"><span class="rec-m-mes">'+MESES[b.mi]+' '+b.yr+'</span><span class="rec-m-tot">'+fmt(b.conf+b.prev)+'</span></div>'
-          +'<div class="rec-m-det">'
-          +'<span class="rec-conf">● A receber '+fmt(b.conf)+' · '+b.nConf+'</span>'
-          +'<span class="rec-prev">○ Previsto '+fmt(b.prev)+' · '+b.nPrev+'</span>'
-          +'</div></div>';
-      }
-    }
-    return '<div class="card"><div class="card-title" style="color:'+dcolor+'">Dra. '+name+' · por mês</div>'+inner+'</div>';
-  };
+  var corpo='';
+  if(ordem.length===0){
+    corpo='<div class="card"><div class="rec-empty">Sem faturamento neste mês.</div></div>';
+  } else {
+    for(var k=0;k<ordem.length;k++) corpo+=renderRecGrupo(ordem[k], grupos[ordem[k]]);
+  }
 
   return '<p class="stt">Recebíveis</p>'
     +atToggle('receb')
-    +'<p class="rec-sub">Previsão de entrada dos atendimentos faturáveis, do mês atual em diante.</p>'
-    +'<div class="hero">'
-    +'<div class="hero-label">Entrada projetada · individual por Dra</div>'
-    +'<div class="scards">'+recCard('Néia','neia',tN)+recCard('Dany','dany',tD)+'</div>'
-    +'<div class="hero-tl">Total geral projetado</div>'
-    +'<div class="hero-tv">'+fmt(tN.conf+tN.prev+tD.conf+tD.prev)+'</div>'
-    +'</div>'
-    +detalheDra('Néia','neia','var(--neia-d)')
-    +detalheDra('Dany','dany','var(--dany-d)');
+    +'<p class="rec-sub">Faturamento por categoria. Cada Dra vê só o próprio.</p>'
+    +nav+hero+corpo;
+}
+
+// Quadro de uma Dra: bloco PF (destaque) + bloco PJ (discreto) + "Sem categoria" + total faturado.
+function renderRecGrupo(dr, g){
+  var name=dr==='dany'?'Dany':'Néia';
+  var dcolor=dr==='dany'?'var(--dany-d)':'var(--neia-d)';
+
+  function linha(cat, semCat){
+    var c=g.cats[cat.id]; if(!c) return '';
+    var prev=c.prev>0?'<span class="rec-cat-prev">+ '+fmt(c.prev)+' prev.</span>':'';
+    return '<div class="rec-cat-row'+(semCat?' sem-cat':'')+'"><span class="rec-cat-l">'+cat.l+'</span>'
+      +'<span class="rec-cat-vs"><span class="rec-cat-fat">'+fmt(c.fat)+'</span>'+prev+'</span></div>';
+  }
+  function bloco(titulo, cats, cls){
+    var linhas='', sub=0, any=false;
+    for(var i=0;i<cats.length;i++){ var c=g.cats[cats[i].id]; if(c){ linhas+=linha(cats[i]); sub+=c.fat; any=true; } }
+    if(!any) return '';
+    return '<div class="rec-cat-blk '+cls+'">'
+      +'<div class="rec-cat-h">'+titulo+'</div>'+linhas
+      +'<div class="rec-cat-sub"><span>Subtotal</span><span>'+fmt(sub)+'</span></div>'
+      +'</div>';
+  }
+
+  var pf=bloco('Particular (PF) — direto na conta', REC_CAT_PF, 'pf');
+  var pj=bloco('Via empresa (PJ)', REC_CAT_PJ, 'pj');
+  var nula='';
+  if(g.cats['__nula__']) nula='<div class="rec-cat-blk nula">'+linha({id:'__nula__', l:'⚠️ Sem categoria'}, true)+'</div>';
+
+  return '<div class="card">'
+    +'<div class="rec-grp-top"><div class="card-title" style="color:'+dcolor+';margin-bottom:0">Dra. '+name+'</div>'
+    +'<div class="rec-grp-tot">'+fmt(g.fat)+'</div></div>'
+    +pf+pj+nula
+    +'</div>';
 }
 
 function renderAtendCard(a){
@@ -2307,6 +2352,12 @@ function bindApp(){
   if(btnSemNext)btnSemNext.addEventListener('click',function(){ S.semOffset++; render(); });
   var btnSemHoje=document.getElementById('btn-sem-hoje');
   if(btnSemHoje)btnSemHoje.addEventListener('click',function(){ S.semOffset=0; render(); });
+  var btnRecPrev=document.getElementById('btn-rec-prev');
+  if(btnRecPrev)btnRecPrev.addEventListener('click',function(){ S.recMesOffset--; render(); });
+  var btnRecNext=document.getElementById('btn-rec-next');
+  if(btnRecNext)btnRecNext.addEventListener('click',function(){ S.recMesOffset++; render(); });
+  var btnRecHoje=document.getElementById('btn-rec-hoje');
+  if(btnRecHoje)btnRecHoje.addEventListener('click',function(){ S.recMesOffset=0; render(); });
   var atSts=document.querySelectorAll('[data-at-st]');
   for(var as=0;as<atSts.length;as++){
     (function(b){b.addEventListener('click',function(){
@@ -2409,7 +2460,7 @@ async function sair(){
   S.ready = false;
   S.tab = 'dashboard';
   S.META = null; S.MAIO = null; S.HIST = []; S.LANC = []; S.PACIENTES = []; S.ATEND = []; S.AVAL = []; S.PAC_NOMES = {};
-  S.papel = null; S.doutoraAtual = null; S.AGDISP = [];
+  S.papel = null; S.doutoraAtual = null; S.AGDISP = []; S.RECEB = []; S.recMesOffset = 0;
   S.semOffset = 0; S.atView = null; S.atEdit = null; S.caixaEdit = false;
   render();
 }
