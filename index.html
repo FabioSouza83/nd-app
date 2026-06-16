@@ -1756,7 +1756,10 @@ async function marcarNaoConvertida(id){
 
 function renderFormAtendimento(){
   var ed = S.atEdit;
-  var defaultDr = ed ? (ed.doutora||'neia') : (S.user.role==='dany' ? 'dany' : 'neia');
+  // Admin escolhe a doutora; cada Dra cria/edita só os próprios (a RLS do banco também exige isso).
+  var isAdmin = (S.papel==='admin') || (S.user && S.user.role==='fabio');
+  var minhaDra = S.doutoraAtual || (S.user && S.user.role==='dany' ? 'dany' : (S.user && S.user.role==='neia' ? 'neia' : null));
+  var defaultDr = ed ? (ed.doutora||'neia') : (isAdmin ? 'neia' : (minhaDra||'neia'));
   var opts='<option value="">Selecione o paciente…</option>';
   for(var i=0;i<S.PACIENTES.length;i++){
     var p=S.PACIENTES[i];
@@ -1782,10 +1785,11 @@ function renderFormAtendimento(){
     +'<input type="text" id="at-pac-busca" placeholder="🔍 Buscar paciente…" style="margin-bottom:6px">'
     +'<select id="at-pac">'+opts+'</select></div>'
     +'<div class="fg"><label>Data e hora *</label><input type="datetime-local" id="at-dt" value="'+dtVal+'"></div>'
-    +'<div class="fg"><label>Doutora</label><select id="at-dr">'
-    +'<option value="neia"'+(defaultDr==='neia'?' selected':'')+'>Dra. Néia</option>'
-    +'<option value="dany"'+(defaultDr==='dany'?' selected':'')+'>Dra. Dany</option>'
-    +'</select></div>'
+    +'<div class="fg"><label>Doutora</label>'
+    +(isAdmin
+      ? '<select id="at-dr"><option value="neia"'+(defaultDr==='neia'?' selected':'')+'>Dra. Néia</option><option value="dany"'+(defaultDr==='dany'?' selected':'')+'>Dra. Dany</option></select>'
+      : '<select id="at-dr" disabled><option value="'+defaultDr+'" selected>'+drLabel(defaultDr)+'</option></select>')
+    +'</div>'
     +'<div class="fg"><label>Valor da sessão (R$)</label><input type="number" id="at-val" step="0.01" min="0" placeholder="Ex: 160,00" value="'+valVal+'"></div>'
     +repBlock
     +'<div class="fg"><label>Observação (opcional)</label><textarea id="at-obs" rows="2" style="resize:none">'+obsVal+'</textarea></div>'
@@ -2323,10 +2327,11 @@ function bindApp(){
   if(btnAtSalvar)btnAtSalvar.addEventListener('click',salvarAtendimento);
   var atPac=document.getElementById('at-pac');
   if(atPac)atPac.addEventListener('change',function(e){
-    // Pré-preenche a doutora com a do paciente (mas o usuário pode trocar depois)
     var opt=e.target.options[e.target.selectedIndex];
-    var dr=opt?opt.getAttribute('data-dr'):'';
-    if(dr){ var sel=document.getElementById('at-dr'); if(sel) sel.value=dr; }
+    // Pré-preenche a doutora com a do paciente — só p/ admin (que escolhe a doutora).
+    // Para uma Dra o atendimento é sempre dela (ela atendeu); o seletor fica travado.
+    var sel=document.getElementById('at-dr');
+    if(sel && !sel.disabled){ var dr=opt?opt.getAttribute('data-dr'):''; if(dr) sel.value=dr; }
     // Pré-preenche o valor com o valor_padrao do paciente (editável)
     var vv=opt?opt.getAttribute('data-valor'):'';
     var vi=document.getElementById('at-val'); if(vi && vv) vi.value=vv;
