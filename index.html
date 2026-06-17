@@ -386,7 +386,7 @@ var PERFIS = {
 
 var CATS = [
   {id:'fixo',l:'Fixo',i:'🔒'},{id:'mkt',l:'Marketing',i:'📢'},{id:'equip',l:'Equipamento',i:'🩺'},
-  {id:'invest',l:'Investimento',i:'🏗️'},{id:'encargo',l:'Encargo',i:'📋'},{id:'outros',l:'Outros',i:'📦'}
+  {id:'invest',l:'Investimento',i:'🏗️'},{id:'encargo',l:'Encargo',i:'📋'},{id:'imposto',l:'Imposto',i:'🧾'},{id:'outros',l:'Outros',i:'📦'}
 ];
 var MESES = ['Jan','Fev','Mar','Abr','Mai','Jun','Jul','Ago','Set','Out','Nov','Dez'];
 var RESERVA_MIN = 1000.00;
@@ -523,17 +523,28 @@ async function carregarDados(){
 function calcDisp(){
   // Mês de referência atual ('YYYY-MM'): compras/parcelas com vencimento FUTURO não entram no disponível agora
   var mesAtual = (S.MAIO && S.MAIO.mes_ref) ? String(S.MAIO.mes_ref).slice(0,7) : '';
-  var rn=0,rd=0,dn=0,dd=0;
+  var rn=0,rd=0,dn=0,dd=0;   // lançamentos MANUAIS: receitas (rn/rd) e compras do mês (dn/dd)
+  var en=0,ed=0;             // despesa de EXTRATO do mês (substitui desp_n) — exclui imposto e contabilidade
   for(var i=0;i<S.LANC.length;i++){
     var t=S.LANC[i];
-    // Lançamentos do extrato já estão computados em rec_n/d e desp_n/d via nd_saldos_mes
-    // Só somamos os lançamentos manuais (origem='manual') para evitar dupla contagem
-    if(t.origem==='extrato') continue;
+    if(t.origem==='extrato'){
+      // A despesa de extrato é recomputada da trilha (não mais do desp_n opaco), EXCLUINDO:
+      //  - imposto (DAS/INSS/GPS): já está coberto pela provisão (prov_n/prov_d) — não pode pesar de novo;
+      //  - contabilidade: entra separada via contabMeta (50/50).
+      // A receita de extrato continua representada por M.rec_n / M.rec_d.
+      if(t.tipo!=='despesa') continue;
+      if(String(t.created_at||'').slice(0,7)!==mesAtual) continue;   // só o mês corrente
+      if(ehImpostoOuContab(t)) continue;
+      if(t.flag==='conjunta'){en+=Number(t.valor)/2;ed+=Number(t.valor)/2;}
+      else if(t.flag==='neia') en+=Number(t.valor);
+      else ed+=Number(t.valor);
+      continue;
+    }
     if(t.tipo==='receita'){
       if(t.flag==='neia') rn+=Number(t.valor);
       else rd+=Number(t.valor);
     } else {
-      // Despesa parcelada/futura: só reduz o disponível quando vence neste mês ou antes
+      // Despesa manual parcelada/futura: só reduz o disponível quando vence neste mês ou antes
       var vmes = t.venc ? String(t.venc).slice(0,7) : null;
       if(vmes && mesAtual && vmes > mesAtual) continue;
       if(t.flag==='conjunta'){dn+=Number(t.valor)/2;dd+=Number(t.valor)/2;}
@@ -545,10 +556,17 @@ function calcDisp(){
   // Custos fixos da empresa rateados 50/50 entre as dras (hoje: contabilidade; futuro: água/luz/internet)
   var contabMeta = (M.contabilidade!=null) ? Number(M.contabilidade)/2 : 0;
   return {
-    neia: Number(M.ant_n)+Number(M.rec_n)+rn-Number(M.desp_n)-dn-Number(M.plab_n)-Number(M.prov_n)-contabMeta,
-    dany: Number(M.ant_d)+Number(M.rec_d)+rd-Number(M.desp_d)-dd-Number(M.plab_d)-Number(M.prov_d)-contabMeta,
-    rn:rn, rd:rd, dn:dn, dd:dd, contab:contabMeta  // manuais por sócia + contabilidade rateada 50/50
+    neia: Number(M.ant_n)+Number(M.rec_n)+rn-en-dn-Number(M.plab_n)-Number(M.prov_n)-contabMeta,
+    dany: Number(M.ant_d)+Number(M.rec_d)+rd-ed-dd-Number(M.plab_d)-Number(M.prov_d)-contabMeta,
+    rn:rn, rd:rd, dn:dn, dd:dd, en:en, ed:ed, contab:contabMeta  // en/ed = despesa de extrato do mês (operac.+obra)
   };
+}
+// Imposto (coberto pela provisão) ou contabilidade (entra via contabMeta): não devem pesar como despesa de extrato.
+function ehImpostoOuContab(t){
+  var d=(t.descricao||'').toLowerCase();
+  if(t.cat==='imposto') return true;
+  if(t.cat==='encargo' && (d.indexOf('das')>=0 || d.indexOf('inss')>=0 || d.indexOf('gps')>=0 || d.indexOf('contab')>=0)) return true;
+  return false;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -708,8 +726,8 @@ function renderDash(){
     +'<div class="hero">'
     +'<div class="hero-label">Disponível para retirada — '+fmtMesRef(S.MAIO.mes_ref)+'</div>'
     +'<div class="scards">'
-    +sCard('Néia','neia',Number(M.ant_n),Number(M.rec_n)+d.rn,Number(M.desp_n),d.dn,Number(M.plab_n),Number(M.prov_n),d.contab,d.neia)
-    +sCard('Dany','dany',Number(M.ant_d),Number(M.rec_d)+d.rd,Number(M.desp_d),d.dd,Number(M.plab_d),Number(M.prov_d),d.contab,d.dany)
+    +sCard('Néia','neia',Number(M.ant_n),Number(M.rec_n)+d.rn,d.en,d.dn,Number(M.plab_n),Number(M.prov_n),d.contab,d.neia)
+    +sCard('Dany','dany',Number(M.ant_d),Number(M.rec_d)+d.rd,d.ed,d.dd,Number(M.plab_d),Number(M.prov_d),d.contab,d.dany)
     +'</div>'
     +'<div class="hero-tl">Total disponível</div>'
     +'<div class="hero-tv">'+fmt(totalDisp)+'</div>'
