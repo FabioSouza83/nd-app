@@ -71,6 +71,13 @@ html,body{height:100%;background:#E8E5DE;font-family:'DM Sans',sans-serif}
 .sc-disp{display:flex;flex-direction:column;align-items:flex-start;padding-top:8px;margin-top:6px;border-top:2px solid rgba(255,255,255,.15)}
 .sc-disp-l{font-size:10px;font-weight:700;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
 .sc-disp-v{font-family:'DM Serif Display',serif;font-size:20px;font-weight:700;color:white;line-height:1}
+.sc-ok{color:#9FE6A0;font-weight:700}
+/* Alerta de saldo negativo por Dra */
+.sc.neg{border:1.5px solid #F0A097;background:rgba(192,57,43,.22)}
+.sc-neg{margin-top:8px;padding-top:8px;border-top:2px solid rgba(255,255,255,.18)}
+.sc-neg-l1{font-size:11px;font-weight:700;color:#FFD3CD}
+.sc-neg-l2{font-family:'DM Serif Display',serif;font-size:17px;font-weight:700;color:#fff;margin-top:5px;line-height:1.15}
+.sc-neg-l3{font-size:10px;color:rgba(255,255,255,.55);margin-top:4px}
 .sc-alert{font-size:10px;color:#FFB347;margin-top:4px}
 .hero-tl{font-size:11px;color:rgba(255,255,255,.5);margin-bottom:4px}
 .hero-tv{font-family:'DM Serif Display',serif;font-size:30px;color:var(--amber);line-height:1}
@@ -636,13 +643,21 @@ function renderDash(){
   var M=S.MAIO;
 
   var sCard=function(name,cls,ant,rec,desp,compras,plab,prov,contab,disp_val){
+    var neg=disp_val<0;
+    var brl=function(v){ return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); };
+    var deficit=neg?Math.abs(disp_val):0;
+    var meta=neg?deficit/0.94:0; // gross-up da provisão ~6%: faturar isso p/ sobrar o déficit líquido depois do imposto
     var isLow=disp_val<=0;
     var dispTxt=isLow?'R$\u00A00,00':fmt(disp_val);
-    var alertTxt=isLow?'<div class="sc-alert">Aguardando próximas receitas</div>':'';
+    var alertTxt=neg?('<div class="sc-neg">'
+      +'<div class="sc-neg-l1">⚠️ Disponível negativo: −'+brl(deficit)+'</div>'
+      +'<div class="sc-neg-l2">Para zerar este mês, fature '+brl(meta)+'</div>'
+      +'<div class="sc-neg-l3">valor já considera a provisão de 6%</div>'
+      +'</div>'):'';
     var comprasLine=compras>0?'<div class="sc-line"><span class="sc-line-l">(–) Compras do mês</span><span class="sc-line-v">('+fmt(compras)+')</span></div>':'';
     var contabLine=contab>0?'<div class="sc-line"><span class="sc-line-l">(–) Contabilidade (50%)</span><span class="sc-line-v">('+fmt(contab)+')</span></div>':'';
     var plabLine=plab>0?'<div class="sc-line"><span class="sc-line-l">(–) Pró-labore</span><span class="sc-line-v">('+fmt(plab)+')</span></div>':'';
-    return '<div class="sc '+cls+'">'
+    return '<div class="sc '+cls+(neg?' neg':'')+'">'
       +'<div class="sc-name '+cls+'">'+name+'</div>'
       +'<div class="sc-line"><span class="sc-line-l">Saldo anterior</span><span class="sc-line-v">'+fmt(ant)+'</span></div>'
       +'<div class="sc-line"><span class="sc-line-l">+ Receitas mês</span><span class="sc-line-v">'+fmt(rec)+'</span></div>'
@@ -651,7 +666,7 @@ function renderDash(){
       +plabLine
       +'<div class="sc-line"><span class="sc-line-l">(–) Provisão (impostos)</span><span class="sc-line-v">('+fmt(prov)+')</span></div>'
       +contabLine
-      +'<div class="sc-disp"><span class="sc-disp-l">Disponível agora</span><span class="sc-disp-v">'+dispTxt+'</span></div>'
+      +(neg?'':'<div class="sc-disp"><span class="sc-disp-l"><span class="sc-ok">✓</span> Disponível agora</span><span class="sc-disp-v">'+fmt(disp_val)+'</span></div>')
       +alertTxt+'</div>';
   };
 
