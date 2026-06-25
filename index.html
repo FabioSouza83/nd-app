@@ -572,6 +572,7 @@ function ehImpostoOuContab(t){
 // ═══════════════════════════════════════════════════════════════
 // RENDER
 // ═══════════════════════════════════════════════════════════════
+var _lastRenderKey;
 function render(){
   var root=document.getElementById('app');
 
@@ -581,6 +582,13 @@ function render(){
       +'</div><p style="margin-top:18px;font-size:13px;letter-spacing:1.5px;text-transform:uppercase">Carregando</p></div>';
     return;
   }
+
+  // "Tela" atual: se não mudou entre renders, preservamos a rolagem (ex.: mudar status de atendimento,
+  // sumiço do toast). Ao TROCAR de tela, vai pro topo — exceto ao abrir a Agenda, que pula pro dia de hoje.
+  var key = S.user ? [S.tab, S.atView||'', S.view||''].join('|') : 'login';
+  var sameScreen = (key === _lastRenderKey);
+  var prevScroll = window.scrollY || window.pageYOffset || 0;
+  _lastRenderKey = key;
 
   if(!S.user){
     root.innerHTML=renderLogin();
@@ -593,6 +601,16 @@ function render(){
     root.innerHTML=renderApp();
     bindApp();
   }
+
+  requestAnimationFrame(function(){
+    if(sameScreen){ window.scrollTo(0, prevScroll); return; }   // re-render da MESMA tela: mantém o lugar
+    // Trocou de tela. Ao abrir a Agenda (semana atual), rola até o dia de hoje em vez do topo:
+    if(S.user && S.ready && S.tab==='atendimentos' && !S.atView && (S.semOffset||0)===0){
+      var hoje=document.getElementById('ag-hoje');
+      if(hoje){ window.scrollTo(0, Math.max(0, hoje.getBoundingClientRect().top + (window.scrollY||0) - 60)); return; }
+    }
+    window.scrollTo(0, 0);   // demais telas: topo
+  });
 
   if(S.toast){
     setTimeout(function(){S.toast=null;S.toastErr=false;render();},2800);
@@ -1498,9 +1516,11 @@ function renderAtendimentos(){
     +'</div>';
 
   html+='<div id="ag-list">';
+  var _hojeStr=(new Date()).toDateString();   // marca o bloco de hoje p/ a Agenda rolar até ele ao abrir
   for(var k=0;k<6;k++){
     var dd=new Date(ws.getFullYear(),ws.getMonth(),ws.getDate()); dd.setDate(dd.getDate()+k);
-    html+='<div class="at-day"><p class="at-day-tt">'+DIAS_SEM[k]+' · '+pad2(dd.getDate())+'/'+pad2(dd.getMonth()+1)+'</p>';
+    var _idHoje=(dd.toDateString()===_hojeStr)?' id="ag-hoje"':'';
+    html+='<div class="at-day"'+_idHoje+'><p class="at-day-tt">'+DIAS_SEM[k]+' · '+pad2(dd.getDate())+'/'+pad2(dd.getMonth()+1)+'</p>';
     if(col==='ambas'){
       html+='<div class="ag2-grid">'
         +'<div class="ag2-col"><div class="ag2-col-h dany">Dany</div>'+renderCol('dany',k)+'</div>'
