@@ -572,7 +572,7 @@ function ehImpostoOuContab(t){
 // ═══════════════════════════════════════════════════════════════
 // RENDER
 // ═══════════════════════════════════════════════════════════════
-var _lastRenderKey;
+var _lastRenderKey, _scrollTarget=null, _scrollPending=false;
 function render(){
   var root=document.getElementById('app');
 
@@ -587,8 +587,14 @@ function render(){
   // sumiço do toast). Ao TROCAR de tela, vai pro topo — exceto ao abrir a Agenda, que pula pro dia de hoje.
   var key = S.user ? [S.tab, S.atView||'', S.view||''].join('|') : 'login';
   var sameScreen = (key === _lastRenderKey);
-  var prevScroll = window.scrollY || window.pageYOffset || 0;
   _lastRenderKey = key;
+  if(sameScreen){
+    // Mesma tela: alvo = posição atual. NÃO sobrescreve se já há restauração pendente (evita pegar
+    // um scrollY=0 transitório de um re-render anterior no mesmo tick — ex.: showToast()+render()).
+    if(!_scrollPending) _scrollTarget = window.scrollY || window.pageYOffset || 0;
+  } else {
+    _scrollTarget = null;   // troca de tela: topo (ou dia de hoje, decidido abaixo)
+  }
 
   if(!S.user){
     root.innerHTML=renderLogin();
@@ -602,8 +608,10 @@ function render(){
     bindApp();
   }
 
+  _scrollPending = true;
   requestAnimationFrame(function(){
-    if(sameScreen){ window.scrollTo(0, prevScroll); return; }   // re-render da MESMA tela: mantém o lugar
+    _scrollPending = false;
+    if(sameScreen && _scrollTarget!=null){ window.scrollTo(0, _scrollTarget); return; }   // mesma tela: mantém o lugar
     // Trocou de tela. Ao abrir a Agenda (semana atual), rola até o dia de hoje em vez do topo:
     if(S.user && S.ready && S.tab==='atendimentos' && !S.atView && (S.semOffset||0)===0){
       var hoje=document.getElementById('ag-hoje');
@@ -1759,8 +1767,7 @@ async function mudarStatusAvaliacao(id,status){
     var res=await sb.from('nd_avaliacoes').update({status:status}).eq('id',id).select().single();
     if(res.error) throw new Error(res.error.message);
     for(var i=0;i<S.AVAL.length;i++) if(S.AVAL[i].id===id){ S.AVAL[i]=res.data; break; }
-    showToast('Avaliação: '+avalStatusLabel(status));
-    render();
+    showToast('Avaliação: '+avalStatusLabel(status));   // showToast já re-renderiza (1 render só preserva a rolagem)
   }catch(e){ console.error('Erro status avaliacao:',e); showToast('Erro: '+e.message,true); }
 }
 
@@ -1921,8 +1928,7 @@ async function mudarStatusAtendimento(id,status){
     var res=await sb.from('nd_atendimentos').update({status:status}).eq('id',id).select().single();
     if(res.error) throw new Error(res.error.message);
     for(var i=0;i<S.ATEND.length;i++) if(S.ATEND[i].id===id){ S.ATEND[i]=res.data; break; }
-    showToast('Status: '+statusAtendLabel(status));
-    render();
+    showToast('Status: '+statusAtendLabel(status));   // showToast já re-renderiza (1 render só preserva a rolagem)
   }catch(e){
     console.error('Erro status atendimento:',e);
     showToast('Erro: '+e.message,true);
