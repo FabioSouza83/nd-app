@@ -589,9 +589,9 @@ function render(){
   var sameScreen = (key === _lastRenderKey);
   _lastRenderKey = key;
   if(sameScreen){
-    // Mesma tela: alvo = posição atual. NÃO sobrescreve se já há restauração pendente (evita pegar
-    // um scrollY=0 transitório de um re-render anterior no mesmo tick — ex.: showToast()+render()).
-    if(!_scrollPending) _scrollTarget = window.scrollY || window.pageYOffset || 0;
+    // Mesma tela: guarda a posição do container .content (que é quem ROLA — overflow-y:auto, NÃO a window).
+    var _sc0=document.querySelector('.content');
+    if(!_scrollPending) _scrollTarget = _sc0 ? _sc0.scrollTop : 0;
   } else {
     _scrollTarget = null;   // troca de tela: topo (ou dia de hoje, decidido abaixo)
   }
@@ -611,13 +611,14 @@ function render(){
   _scrollPending = true;
   requestAnimationFrame(function(){
     _scrollPending = false;
-    if(sameScreen && _scrollTarget!=null){ window.scrollTo(0, _scrollTarget); return; }   // mesma tela: mantém o lugar
+    var sc=document.querySelector('.content'); if(!sc) return;   // o container que rola
+    if(sameScreen && _scrollTarget!=null){ sc.scrollTop = _scrollTarget; return; }   // mesma tela: mantém o lugar
     // Trocou de tela. Ao abrir a Agenda (semana atual), rola até o dia de hoje em vez do topo:
     if(S.user && S.ready && S.tab==='atendimentos' && !S.atView && (S.semOffset||0)===0){
       var hoje=document.getElementById('ag-hoje');
-      if(hoje){ window.scrollTo(0, Math.max(0, hoje.getBoundingClientRect().top + (window.scrollY||0) - 60)); return; }
+      if(hoje){ sc.scrollTop = Math.max(0, hoje.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 8); return; }
     }
-    window.scrollTo(0, 0);   // demais telas: topo
+    sc.scrollTop = 0;   // demais telas: topo
   });
 
   if(S.toast){
@@ -1923,12 +1924,46 @@ async function salvarAtendimento(){
   }
 }
 
+// Toast sem re-render — usado ao atualizar SÓ o card, p/ não redesenhar a lista (e não mexer na rolagem).
+function toastDOM(msg, isErr){
+  var ex=document.querySelector('.toast.toast-dom'); if(ex&&ex.parentNode) ex.parentNode.removeChild(ex);
+  var t=document.createElement('div'); t.className='toast toast-dom'+(isErr?' err':''); t.textContent=msg;
+  document.body.appendChild(t);
+  setTimeout(function(){ if(t.parentNode) t.parentNode.removeChild(t); }, 2800);
+}
+// Recalcula e atualiza no DOM o "Previsto faturável" da semana, sem redesenhar a lista.
+function atualizarPrevistoSemana(){
+  var ws=inicioSemana(S.semOffset);
+  var FATURAVEL={agendado:1, realizado:1, falta_faturada:1};
+  var papel=S.papel||(S.user&&S.user.role==='fabio'?'admin':'dra');
+  var minhaDra=S.doutoraAtual||(S.user&&S.user.role==='dany'?'dany':(S.user&&S.user.role==='neia'?'neia':null));
+  var isAdmin=(papel==='admin');
+  var previsto=0;
+  for(var i=0;i<S.ATEND.length;i++){
+    var a=S.ATEND[i]; var dr=(a.doutora==='dany')?'dany':'neia';
+    if(!(isAdmin||dr===minhaDra)) continue;
+    var d=new Date(a.data_hora); var dMid=new Date(d.getFullYear(),d.getMonth(),d.getDate());
+    var diff=Math.round((dMid-ws)/86400000);
+    if(diff<0||diff>5) continue;
+    if(FATURAVEL[a.status] && a.valor!=null) previsto+=Number(a.valor);
+  }
+  var el=document.querySelector('.at-wprev');
+  if(previsto>0){
+    if(el){ el.textContent='Previsto faturável · '+fmt(previsto); }
+    else { var wrap=document.querySelector('.at-week > div'); if(wrap){ var nd=document.createElement('div'); nd.className='at-wprev'; nd.textContent='Previsto faturável · '+fmt(previsto); wrap.appendChild(nd); } }
+  } else if(el && el.parentNode){ el.parentNode.removeChild(el); }
+}
+
 async function mudarStatusAtendimento(id,status){
   try{
     var res=await sb.from('nd_atendimentos').update({status:status}).eq('id',id).select().single();
     if(res.error) throw new Error(res.error.message);
     for(var i=0;i<S.ATEND.length;i++) if(S.ATEND[i].id===id){ S.ATEND[i]=res.data; break; }
-    showToast('Status: '+statusAtendLabel(status));   // showToast já re-renderiza (1 render só preserva a rolagem)
+    // Atualiza SÓ o card no lugar (sem render global): a lista não é redesenhada, a rolagem da .content fica intacta.
+    var btns=document.querySelectorAll('[data-at-id="'+id+'"][data-at-st]');
+    for(var b=0;b<btns.length;b++) btns[b].classList.toggle('on', btns[b].getAttribute('data-at-st')===status);
+    atualizarPrevistoSemana();   // único agregado que depende do status
+    toastDOM('Status: '+statusAtendLabel(status));
   }catch(e){
     console.error('Erro status atendimento:',e);
     showToast('Erro: '+e.message,true);
