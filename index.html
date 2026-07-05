@@ -520,6 +520,13 @@ async function carregarDados(){
 // ═══════════════════════════════════════════════════════════════
 // CÁLCULOS (usam S.MAIO e S.LANC)
 // ═══════════════════════════════════════════════════════════════
+// Rateio conjunto 50/50 em centavos inteiros. O centavo ÍMPAR vai para a Néia (n) —
+// regra pública e fixa que espelha o agregado auditado de junho (desp_n > desp_d). Evita meio-centavo.
+function rateio(valor){
+  var c=Math.round(Number(valor)*100);
+  var d=Math.floor(c/2);
+  return { n:(c-d)/100, d:d/100 };
+}
 function calcDisp(){
   // Mês de referência atual ('YYYY-MM'): compras/parcelas com vencimento FUTURO não entram no disponível agora
   var mesAtual = (S.MAIO && S.MAIO.mes_ref) ? String(S.MAIO.mes_ref).slice(0,7) : '';
@@ -539,11 +546,11 @@ function calcDisp(){
       if(t.natureza==='imposto'){
         // Imposto pago no mês pesa como despesa real. A provisão (prov_n/prov_d) é RESERVA à parte:
         // desconta no mês de competência e RETORNA no seguinte (ant = res + prov) — não anula o pagamento.
-        if(t.flag==='conjunta'){impn+=Number(t.valor)/2;impd+=Number(t.valor)/2;}
+        if(t.flag==='conjunta'){var ri=rateio(t.valor);impn+=ri.n;impd+=ri.d;}
         else if(t.flag==='neia') impn+=Number(t.valor);
         else impd+=Number(t.valor);
       } else {
-        if(t.flag==='conjunta'){en+=Number(t.valor)/2;ed+=Number(t.valor)/2;}
+        if(t.flag==='conjunta'){var re=rateio(t.valor);en+=re.n;ed+=re.d;}
         else if(t.flag==='neia') en+=Number(t.valor);
         else ed+=Number(t.valor);
       }
@@ -556,7 +563,7 @@ function calcDisp(){
       // Despesa manual parcelada/futura: só reduz o disponível quando vence neste mês ou antes
       var vmes = t.venc ? String(t.venc).slice(0,7) : null;
       if(vmes && mesAtual && vmes > mesAtual) continue;
-      if(t.flag==='conjunta'){dn+=Number(t.valor)/2;dd+=Number(t.valor)/2;}
+      if(t.flag==='conjunta'){var rc=rateio(t.valor);dn+=rc.n;dd+=rc.d;}
       else if(t.flag==='neia') dn+=Number(t.valor);
       else dd+=Number(t.valor);
     }
