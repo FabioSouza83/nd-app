@@ -524,20 +524,29 @@ function calcDisp(){
   // Mês de referência atual ('YYYY-MM'): compras/parcelas com vencimento FUTURO não entram no disponível agora
   var mesAtual = (S.MAIO && S.MAIO.mes_ref) ? String(S.MAIO.mes_ref).slice(0,7) : '';
   var rn=0,rd=0,dn=0,dd=0;   // lançamentos MANUAIS: receitas (rn/rd) e compras do mês (dn/dd)
-  var en=0,ed=0;             // despesa de EXTRATO do mês (substitui desp_n) — exclui imposto e contabilidade
+  var en=0,ed=0;             // despesa OPERACIONAL de extrato do mês (natureza='operacao')
+  var impn=0,impd=0;         // imposto PAGO de extrato no mês (natureza='imposto', competência anterior)
   for(var i=0;i<S.LANC.length;i++){
     var t=S.LANC[i];
+    // Classificação pela NATUREZA (fim do ehImpostoOuContab por cat/texto — Bloco 3):
+    //  - capital_giro (envelope/aporte) e exibicao (linhas-espelho): NUNCA entram no disponível;
+    //  - contabilidade: entra à parte via contabMeta (50/50), não aqui.
+    if(t.natureza==='capital_giro'||t.natureza==='exibicao'||t.natureza==='contabilidade') continue;
     if(t.origem==='extrato'){
-      // A despesa de extrato é recomputada da trilha (não mais do desp_n opaco), EXCLUINDO:
-      //  - imposto (DAS/INSS/GPS): já está coberto pela provisão (prov_n/prov_d) — não pode pesar de novo;
-      //  - contabilidade: entra separada via contabMeta (50/50).
-      // A receita de extrato continua representada por M.rec_n / M.rec_d.
+      // Receita de extrato continua representada por M.rec_n / M.rec_d (agregado derivado da trilha).
       if(t.tipo!=='despesa') continue;
       if(String(t.created_at||'').slice(0,7)!==mesAtual) continue;   // só o mês corrente
-      if(ehImpostoOuContab(t)) continue;
-      if(t.flag==='conjunta'){en+=Number(t.valor)/2;ed+=Number(t.valor)/2;}
-      else if(t.flag==='neia') en+=Number(t.valor);
-      else ed+=Number(t.valor);
+      if(t.natureza==='imposto'){
+        // Imposto pago no mês pesa como despesa real. A provisão (prov_n/prov_d) é RESERVA à parte:
+        // desconta no mês de competência e RETORNA no seguinte (ant = res + prov) — não anula o pagamento.
+        if(t.flag==='conjunta'){impn+=Number(t.valor)/2;impd+=Number(t.valor)/2;}
+        else if(t.flag==='neia') impn+=Number(t.valor);
+        else impd+=Number(t.valor);
+      } else {
+        if(t.flag==='conjunta'){en+=Number(t.valor)/2;ed+=Number(t.valor)/2;}
+        else if(t.flag==='neia') en+=Number(t.valor);
+        else ed+=Number(t.valor);
+      }
       continue;
     }
     if(t.tipo==='receita'){
@@ -556,17 +565,10 @@ function calcDisp(){
   // Custos fixos da empresa rateados 50/50 entre as dras (hoje: contabilidade; futuro: água/luz/internet)
   var contabMeta = (M.contabilidade!=null) ? Number(M.contabilidade)/2 : 0;
   return {
-    neia: Number(M.ant_n)+Number(M.rec_n)+rn-en-dn-Number(M.plab_n)-Number(M.prov_n)-contabMeta,
-    dany: Number(M.ant_d)+Number(M.rec_d)+rd-ed-dd-Number(M.plab_d)-Number(M.prov_d)-contabMeta,
-    rn:rn, rd:rd, dn:dn, dd:dd, en:en, ed:ed, contab:contabMeta  // en/ed = despesa de extrato do mês (operac.+obra)
+    neia: Number(M.ant_n)+Number(M.rec_n)+rn-en-impn-dn-Number(M.plab_n)-Number(M.prov_n)-contabMeta,
+    dany: Number(M.ant_d)+Number(M.rec_d)+rd-ed-impd-dd-Number(M.plab_d)-Number(M.prov_d)-contabMeta,
+    rn:rn, rd:rd, dn:dn, dd:dd, en:en, ed:ed, impn:impn, impd:impd, contab:contabMeta
   };
-}
-// Imposto (coberto pela provisão) ou contabilidade (entra via contabMeta): não devem pesar como despesa de extrato.
-function ehImpostoOuContab(t){
-  var d=(t.descricao||'').toLowerCase();
-  if(t.cat==='imposto') return true;
-  if(t.cat==='encargo' && (d.indexOf('das')>=0 || d.indexOf('inss')>=0 || d.indexOf('gps')>=0 || d.indexOf('contab')>=0)) return true;
-  return false;
 }
 
 // ═══════════════════════════════════════════════════════════════
@@ -687,7 +689,7 @@ function renderDash(){
   var d=calcDisp();
   var M=S.MAIO;
 
-  var sCard=function(name,cls,ant,rec,desp,compras,plab,prov,contab,disp_val){
+  var sCard=function(name,cls,ant,rec,desp,compras,impPago,plab,prov,contab,disp_val){
     var neg=disp_val<0;
     var brl=function(v){ return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); };
     var deficit=neg?Math.abs(disp_val):0;
@@ -700,6 +702,7 @@ function renderDash(){
       +'<div class="sc-neg-l3">valor já considera a provisão de 6%</div>'
       +'</div>'):'';
     var comprasLine=compras>0?'<div class="sc-line"><span class="sc-line-l">(–) Compras do mês</span><span class="sc-line-v">('+fmt(compras)+')</span></div>':'';
+    var impLine=impPago>0?'<div class="sc-line"><span class="sc-line-l">(–) Impostos pagos (comp. anterior)</span><span class="sc-line-v">('+fmt(impPago)+')</span></div>':'';
     var contabLine=contab>0?'<div class="sc-line"><span class="sc-line-l">(–) Contabilidade (50%)</span><span class="sc-line-v">('+fmt(contab)+')</span></div>':'';
     var plabLine=plab>0?'<div class="sc-line"><span class="sc-line-l">(–) Pró-labore</span><span class="sc-line-v">('+fmt(plab)+')</span></div>':'';
     return '<div class="sc '+cls+(neg?' neg':'')+'">'
@@ -707,9 +710,10 @@ function renderDash(){
       +'<div class="sc-line"><span class="sc-line-l">Saldo anterior</span><span class="sc-line-v">'+fmt(ant)+'</span></div>'
       +'<div class="sc-line"><span class="sc-line-l">+ Receitas mês</span><span class="sc-line-v">'+fmt(rec)+'</span></div>'
       +'<div class="sc-line"><span class="sc-line-l">(–) Despesas operac.</span><span class="sc-line-v">('+fmt(desp)+')</span></div>'
+      +impLine
       +comprasLine
       +plabLine
-      +'<div class="sc-line"><span class="sc-line-l">(–) Provisão (impostos)</span><span class="sc-line-v">('+fmt(prov)+')</span></div>'
+      +'<div class="sc-line"><span class="sc-line-l">(–) Provisão (impostos)<br><span style="font-size:10px;color:var(--gray);font-weight:400">reserva — retorna no mês seguinte</span></span><span class="sc-line-v">('+fmt(prov)+')</span></div>'
       +contabLine
       +(neg?'':'<div class="sc-disp"><span class="sc-disp-l"><span class="sc-ok">✓</span> Disponível agora</span><span class="sc-disp-v">'+fmt(disp_val)+'</span></div>')
       +alertTxt+'</div>';
@@ -753,8 +757,8 @@ function renderDash(){
     +'<div class="hero">'
     +'<div class="hero-label">Disponível para retirada — '+fmtMesRef(S.MAIO.mes_ref)+'</div>'
     +'<div class="scards">'
-    +sCard('Néia','neia',Number(M.ant_n),Number(M.rec_n)+d.rn,d.en,d.dn,Number(M.plab_n),Number(M.prov_n),d.contab,d.neia)
-    +sCard('Dany','dany',Number(M.ant_d),Number(M.rec_d)+d.rd,d.ed,d.dd,Number(M.plab_d),Number(M.prov_d),d.contab,d.dany)
+    +sCard('Néia','neia',Number(M.ant_n),Number(M.rec_n)+d.rn,d.en,d.dn,d.impn,Number(M.plab_n),Number(M.prov_n),d.contab,d.neia)
+    +sCard('Dany','dany',Number(M.ant_d),Number(M.rec_d)+d.rd,d.ed,d.dd,d.impd,Number(M.plab_d),Number(M.prov_d),d.contab,d.dany)
     +'</div>'
     +'<div class="hero-tl">Total disponível</div>'
     +'<div class="hero-tv">'+fmt(totalDisp)+'</div>'
