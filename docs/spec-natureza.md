@@ -14,12 +14,18 @@ Estado ao consolidar (05/07/2026): Bloco 1 aplicado · Bloco 2 ✅ (backfill + d
 5. **Um livro só.** A trilha de lançamentos é a fonte da verdade. Agregados (`nd_saldos_mes`) tornam-se DERIVADOS da trilha após o Bloco 3 — nunca mais mantidos por fora.
 6. **Não existe resíduo inexplicável — existe lançamento sem nome.** Toda divergência se resolve nomeando linhas, não ajustando números.
 7. **Simetria:** ajustes e painéis de caixa compartilhado aparecem iguais para as duas Dras, mesmo quando afetam só uma. RLS protege dados de pacientes; caixa comum é território comum.
+8. **Provisão é reserva, não despesa.** A provisão de impostos desconta do disponível no mês de competência, mas RETORNA no mês seguinte e é consumida pelo pagamento real do tributo. Regra de carry permanente: **`ant_mês = res_mês_anterior + prov_mês_anterior`**. Sem a devolução, contar o imposto pago (princípio: caixa real pesa) cobraria cada tributo duas vezes. *(Origem: teste de fronteira do fechamento de junho, 05/07 — ver "Gabarito oficial".)*
 
 ## Gabarito oficial de junho/2026
 
-**Néia R$ 3.353,08 · Dany R$ 6.302,28** — confirmado por auditoria completa em 05/07: receita da trilha = extrato Sicoob ao centavo (R$ 14.732,37 excl. aporte), classificações pela régua, dois livros reconciliados linha a linha. Todo bloco que altere cálculo valida contra este gabarito.
+**Néia R$ 3.681,19 · Dany R$ 6.505,08** — gabarito oficial (revisado 05/07 pelo teste de fronteira, princípio 8). Todo bloco que altere cálculo valida contra este gabarito.
 
-Saques pós-fechamento de junho: retenção prudencial de R$ 1.300/Dra (pagamento do pintor de 03/07) → **Néia saca R$ 2.053,08 · Dany saca R$ 5.002,28**.
+**Composição:** receita da trilha = extrato Sicoob ao centavo (R$ 14.732,37 excl. aporte); despesa pela régua **contando o imposto pago** (INSS+DAS comp. maio, R$ 1.080,04) como caixa real; provisão de junho mantida como reserva.
+**`ant` de junho recebe a devolução da provisão de maio** (princípio 8): `ant_n = res_mai 0,00 + prov_mai 328,10 = 328,10`; `ant_d = res_mai 462,20 + prov_mai 202,80 = 665,00`.
+
+*Por que mudou de 3.353,08/6.302,28 → 3.681,19/6.505,08:* o número anterior contava o imposto de maio pago em junho mas NÃO devolvia a provisão de maio, descontando R$ 530,90 das Dras (328,10 N / 202,80 D) duas vezes e sem nome — viola o princípio 6. "Mês fechado não muda" protege maio (intacto nas duas leituras), não junho (nunca fechado). Opção retroativa adotada; a régua serve à verdade, não à inércia do número.
+
+Saques pós-fechamento de junho: retenção prudencial de R$ 1.300/Dra (pagamento do pintor de 03/07) → **Néia saca R$ 2.381,19 · Dany saca R$ 5.205,08**.
 
 ## Classificações definitivas (junho)
 
@@ -45,9 +51,15 @@ Coluna `natureza` text NOT NULL DEFAULT 'operacao', CHECK nos 5 valores. Default
 Backfill aplicado pela tabela de classificações acima; id 54 deletado. Reconciliação trilha × agregado provada linha a linha: receita bate ao centavo, despesa bate a menos da mensalidade Sicoob R$16,99 (que não tem lançamento próprio ainda — adiada por sequenciamento pro Bloco 3, ver pendência acima). Gate = **3.353,08 / 6.302,28** confirmado. `calcDispV2` lê `natureza` (timing/rateio inalterados: `origem`, `tipo`, `created_at`, `venc`, `flag`).
 
 ### BLOCO 3 — Refatorar calcDisp (commit isolado)
-calcDispV2 vira o calcDisp. `ehImpostoOuContab` morre. Junto no deploy: lançamento R$16,99 (acima) e início da derivação do `nd_saldos_mes` a partir da trilha (view/recálculo — princípio 5). Aceite: gabarito reproduzido + diff nomeado zero nos demais meses.
+calcDispV2 vira o calcDisp. `ehImpostoOuContab` morre; classificação passa a ser por `natureza`. **Imposto CONTA** como despesa (natureza='imposto'); capital_giro/exibicao nunca entram; contabilidade segue via `contabMeta`. Tela ganha linha "(–) Impostos pagos (comp. anterior)" separada da provisão, e a provisão exibe "reserva — retorna no mês seguinte" (princípio 8). Junto no MESMO deploy: lançamento R$16,99 (acima), atualização do `ant` de junho para 328,10/665,00 (devolução da provisão de maio), e início da derivação do `nd_saldos_mes` a partir da trilha. Aceite: gabarito **3.681,19/6.505,08** reproduzido no traço + diff nomeado zero nos demais meses.
+
+**Derivação `nd_saldos_mes` (escopo mínimo aprovado):** recomputar só `rec_n/rec_d/desp_n/desp_d` da trilha; manter `ant/prov/plab` manuais por ora.
 
 **Após Bloco 3 verde: fechar junho no app (res = gabarito) → liberar PIX com retenção.**
+
+**PENDÊNCIAS NOMEADAS (não travam o push):**
+- **Derivação do `ant` → view:** hoje `ant = res_anterior + prov_anterior` (princípio 8) aplicado à mão no fechamento manual. Converter `nd_saldos_mes` para view/recálculo quando a regra estiver codificada (Blocos 5/6).
+- **Colchão histórico (auditoria read-only):** somar provisões deduzidas em fev–abr que nunca retornaram ao `ant` do mês seguinte (regra antiga não devolvia). Se existirem, é dinheiro das Dras sem atribuição na conta. Devolução, se couber, via ajuste declarado (Bloco 6) — meses fechados permanecem imutáveis. Maio→junho já corrigido (ver Gabarito oficial).
 
 ### BLOCO 4 — Inferência por gêmeo + fila de pendentes
 Lançamento novo: busca gêmeo no histórico (mesma `cat` + descrição normalizada) → herda `natureza` **e `compromisso_id`**. Sem gêmeo → `operacao` + fila. Fila é exclusiva do Fábio (admin); permite classificar natureza E vincular compromisso. Formulário das Dras não muda em nada.
