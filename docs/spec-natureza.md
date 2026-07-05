@@ -18,14 +18,16 @@ Estado ao consolidar (05/07/2026): Bloco 1 aplicado · Bloco 2 ✅ (backfill + d
 
 ## Gabarito oficial de junho/2026
 
-**Néia R$ 3.681,19 · Dany R$ 6.505,08** — gabarito oficial (revisado 05/07 pelo teste de fronteira, princípio 8). Todo bloco que altere cálculo valida contra este gabarito.
+**Néia R$ 3.681,18 · Dany R$ 6.505,08 · Total R$ 10.186,26** — gabarito oficial (revisado 05/07 pelo teste de fronteira, princípio 8). Todo bloco que altere cálculo valida contra este gabarito.
 
 **Composição:** receita da trilha = extrato Sicoob ao centavo (R$ 14.732,37 excl. aporte); despesa pela régua **contando o imposto pago** (INSS+DAS comp. maio, R$ 1.080,04) como caixa real; provisão de junho mantida como reserva.
 **`ant` de junho recebe a devolução da provisão de maio** (princípio 8): `ant_n = res_mai 0,00 + prov_mai 328,10 = 328,10`; `ant_d = res_mai 462,20 + prov_mai 202,80 = 665,00`.
 
-*Por que mudou de 3.353,08/6.302,28 → 3.681,19/6.505,08:* o número anterior contava o imposto de maio pago em junho mas NÃO devolvia a provisão de maio, descontando R$ 530,90 das Dras (328,10 N / 202,80 D) duas vezes e sem nome — viola o princípio 6. "Mês fechado não muda" protege maio (intacto nas duas leituras), não junho (nunca fechado). Opção retroativa adotada; a régua serve à verdade, não à inércia do número.
+*Por que mudou de 3.353,08/6.302,28 → 3.681,18/6.505,08:* o número anterior contava o imposto de maio pago em junho mas NÃO devolvia a provisão de maio, descontando R$ 530,90 das Dras (328,10 N / 202,80 D) duas vezes e sem nome — viola o princípio 6. "Mês fechado não muda" protege maio (intacto nas duas leituras), não junho (nunca fechado). Opção retroativa adotada; a régua serve à verdade, não à inércia do número.
 
-Saques pós-fechamento de junho: retenção prudencial de R$ 1.300/Dra (pagamento do pintor de 03/07) → **Néia saca R$ 2.381,19 · Dany saca R$ 5.205,08**.
+*Centavo do rateio:* o gabarito foi PRIMEIRO declarado 3.681,19/6.505,08 (total 10.186,27) — 1 centavo fantasma, o mesmo princípio 6 aplicado ao próprio auditor. O R$ 16,99 do Sicoob é conjunto e tem centavos ímpares (8,495/Dra); o centavo tem que cair numa só. **Regra determinística (código + spec): centavo ímpar de rateio conjunto → Néia** — fundamento: espelha o agregado auditado de junho (`desp_n` 2.425,57 > `desp_d` 2.425,56). Total real = 10.186,26.
+
+Saques pós-fechamento de junho: retenção prudencial de R$ 1.300/Dra (pagamento do pintor de 03/07) → **Néia saca R$ 2.381,18 · Dany saca R$ 5.205,08**.
 
 ## Classificações definitivas (junho)
 
@@ -51,7 +53,7 @@ Coluna `natureza` text NOT NULL DEFAULT 'operacao', CHECK nos 5 valores. Default
 Backfill aplicado pela tabela de classificações acima; id 54 deletado. Reconciliação trilha × agregado provada linha a linha: receita bate ao centavo, despesa bate a menos da mensalidade Sicoob R$16,99 (que não tem lançamento próprio ainda — adiada por sequenciamento pro Bloco 3, ver pendência acima). Gate = **3.353,08 / 6.302,28** confirmado. `calcDispV2` lê `natureza` (timing/rateio inalterados: `origem`, `tipo`, `created_at`, `venc`, `flag`).
 
 ### BLOCO 3 — Refatorar calcDisp (commit isolado)
-calcDispV2 vira o calcDisp. `ehImpostoOuContab` morre; classificação passa a ser por `natureza`. **Imposto CONTA** como despesa (natureza='imposto'); capital_giro/exibicao nunca entram; contabilidade segue via `contabMeta`. Tela ganha linha "(–) Impostos pagos (comp. anterior)" separada da provisão, e a provisão exibe "reserva — retorna no mês seguinte" (princípio 8). Junto no MESMO deploy: lançamento R$16,99 (acima), atualização do `ant` de junho para 328,10/665,00 (devolução da provisão de maio), e início da derivação do `nd_saldos_mes` a partir da trilha. Aceite: gabarito **3.681,19/6.505,08** reproduzido no traço + diff nomeado zero nos demais meses.
+calcDispV2 vira o calcDisp. `ehImpostoOuContab` morre; classificação passa a ser por `natureza`. **Imposto CONTA** como despesa (natureza='imposto'); capital_giro/exibicao nunca entram; contabilidade segue via `contabMeta`. Tela ganha linha "(–) Impostos pagos (comp. anterior)" separada da provisão, e a provisão exibe "reserva — retorna no mês seguinte" (princípio 8). Junto no MESMO deploy: lançamento R$16,99 (acima), atualização do `ant` de junho para 328,10/665,00 (devolução da provisão de maio), e início da derivação do `nd_saldos_mes` a partir da trilha. Rateio conjunto com centavo ímpar → Néia (regra fixa, ver Gabarito oficial). Aceite: gabarito **3.681,18/6.505,08** (total 10.186,26) reproduzido no traço + diff nomeado zero nos demais meses.
 
 **Derivação `nd_saldos_mes` (escopo mínimo aprovado):** recomputar só `rec_n/rec_d/desp_n/desp_d` da trilha; manter `ant/prov/plab` manuais por ora.
 
