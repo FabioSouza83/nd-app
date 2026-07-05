@@ -1,0 +1,90 @@
+# SPEC v2 — ND Financeiro: `natureza` + Fluxo de Caixa + Compromissos
+**Arquivo canônico. Deve viver no repositório (`docs/spec-natureza.md`) e ser emendado por commit, nunca por memória de conversa.**
+
+Estado ao consolidar (05/07/2026): Bloco 1 aplicado · backfill + delete id 54 + gate em execução · Blocos 3–9 pendentes.
+
+---
+
+## Princípios (a régua)
+
+1. **Cálculo é rocha.** Nenhuma classificação depende de texto digitado. Erro de classificação falha para o lado VISÍVEL (item aparece no disponível), nunca para o invisível.
+2. **Classificação é pela régua, nunca pelo resíduo.** Não se escolhe natureza para fazer número bater.
+3. **Régua de natureza:** bem de clínica = aporte (`capital_giro`); serviço e consumível = Dras (`operacao`). O canal de pagamento (PIX direto, cartão, boleto) NÃO decide natureza.
+4. **Piso de materialidade:** bem de clínica < R$100 → `operacao` (despesa do período, mesmo sendo bem que fica); ≥ R$100 → `capital_giro`. Classifica pelo valor do bem, não pelo canal nem pelo número resultante. *(Origem: decisão do id 33, corrente R$39 → operacao. Não reclassifica nada existente.)*
+5. **Um livro só.** A trilha de lançamentos é a fonte da verdade. Agregados (`nd_saldos_mes`) tornam-se DERIVADOS da trilha após o Bloco 3 — nunca mais mantidos por fora.
+6. **Não existe resíduo inexplicável — existe lançamento sem nome.** Toda divergência se resolve nomeando linhas, não ajustando números.
+7. **Simetria:** ajustes e painéis de caixa compartilhado aparecem iguais para as duas Dras, mesmo quando afetam só uma. RLS protege dados de pacientes; caixa comum é território comum.
+
+## Gabarito oficial de junho/2026
+
+**Néia R$ 3.353,08 · Dany R$ 6.302,28** — confirmado por auditoria completa em 05/07: receita da trilha = extrato Sicoob ao centavo (R$ 14.732,37 excl. aporte), classificações pela régua, dois livros reconciliados linha a linha. Todo bloco que altere cálculo valida contra este gabarito.
+
+Saques pós-fechamento de junho: retenção prudencial de R$ 1.300/Dra (pagamento do pintor de 03/07) → **Néia saca R$ 2.053,08 · Dany saca R$ 5.002,28**.
+
+## Classificações definitivas (junho)
+
+| natureza | ids |
+|---|---|
+| `capital_giro` | 35 (câmeras 143,98) · 36–41 (cadeiras) · 52 (placa 154,14) · 105 (cadeira escritório 449,91) · 98, 99 |
+| `operacao` | 31 (fita — consumível de obra) · 33 (corrente — piso de materialidade) · 50 (Projeto Arq Carla — serviço) · 53 (pintor — competência junho) · todas as receitas |
+| `imposto` | 55 (INSS) · 56 (DAS) |
+| `contabilidade` | 58 |
+| `exibicao` | 51 (fatura Sicoob 327,62 — espelho; só R$16,99 é despesa real) |
+| DELETE | 54 (placa duplicada — extrato confirma um único débito, 15/06) |
+
+**Pendência acoplada ao Bloco 3:** criar lançamento `operacao` conjunto de **R$ 16,99** (mensalidade cartão Sicoob) NO MESMO deploy do calcDispV2 — nunca antes, pois o calcDisp antigo o somaria por cima do id 51 e dobraria a conta ao vivo.
+
+---
+
+## Blocos de execução
+
+### BLOCO 1 — Schema ✅ (aplicado 05/07)
+Coluna `natureza` text NOT NULL DEFAULT 'operacao', CHECK nos 5 valores. Default no banco = rede de segurança (item esquecido nasce visível).
+
+### BLOCO 2 — Backfill + gate (em execução)
+Backfill pela tabela de classificações acima. `calcDispV2` paralela lê APENAS `natureza` (timing/rateio inalterados: `origem`, `tipo`, `created_at`, `venc`, `flag`). **Gate:** calcDispV2(junho) = 3.353,08 / 6.302,28 exato. Sem gate verde, nada avança.
+
+### BLOCO 3 — Refatorar calcDisp (commit isolado)
+calcDispV2 vira o calcDisp. `ehImpostoOuContab` morre. Junto no deploy: lançamento R$16,99 (acima) e início da derivação do `nd_saldos_mes` a partir da trilha (view/recálculo — princípio 5). Aceite: gabarito reproduzido + diff nomeado zero nos demais meses.
+
+**Após Bloco 3 verde: fechar junho no app (res = gabarito) → liberar PIX com retenção.**
+
+### BLOCO 4 — Inferência por gêmeo + fila de pendentes
+Lançamento novo: busca gêmeo no histórico (mesma `cat` + descrição normalizada) → herda `natureza` **e `compromisso_id`**. Sem gêmeo → `operacao` + fila. Fila é exclusiva do Fábio (admin); permite classificar natureza E vincular compromisso. Formulário das Dras não muda em nada.
+
+### BLOCO 5 — Trava de fechamento
+"Fechar mês" só habilita com fila zerada para o mês. Contador visível ("N pendentes", link pra fila).
+
+### BLOCO 6 — Mês fechado imutável + lançamento de ajuste
+Mês fechado nunca reabre. Correção retroativa = ajuste no mês corrente com 4 campos obrigatórios: **o quê** (FK ao original, clicável) · **por quê** (natureza anterior → correta) · **quanto/pra quem** (efeito por Dra, explícito) · **quando** (mês do ajuste + mês de referência). Simetria obrigatória (princípio 7).
+
+### BLOCO 7 — Resumo de fechamento em 3 blocos
+1. **Resultado do mês** (puro, comparável) · 2. **Ajustes de meses anteriores** (só renderiza se houver; cada item com link, motivo, efeito por Dra) · 3. **Total a transferir** (1+2 → é o PIX).
+
+### BLOCO 8 — Tabela `compromissos` (generaliza `aportes`)
+Campos: `valor_principal`, `valor_total`, `pago_acumulado` (por vínculo `compromisso_id`, nunca por texto), `saldo`, `condicao_quitacao`, `credor`, cronograma.
+
+**Compromisso 1 — Empréstimo Néia:**
+- Entrou: R$ 35.000 (2 PIX de Edineia em **29/06**: 20.000 + 15.000 — data do banco, corrige 27–28/06)
+- Devolução: **48 × R$ 1.239,09 = R$ 59.476,32** · 1ª parcela **27/07/2026**, mensal dia 27
+- Custo bancário: **R$ 24.476,32** (empréstimo no CPF da Néia, repassado sem margem — exibir explícito)
+- Parcelas NÃO são pré-criadas (chegam pelo extrato — pré-criar causaria dupla contagem, provável origem das fantasmas ids 62–97). Cronograma vive na tabela; cada linha de extrato recebe `compromisso_id` (1ª manual, seguintes por gêmeo)
+- Parcela = despesa conjunta 50/50, `operacao`. **NUNCA deduz do envelope** (envelope diminui por designação de capital; devolução diminui por parcela paga — livros independentes)
+
+**Compromisso 2 — Contrato do pintor:**
+- Total: R$ 13.600 (12.000 + 1.600) · Pago: mai 5.000 (id 28 ✓ contado) + jun 3.000 (id 53 ✓ contado) + jul 2.600 (03/07, lançar quando extrato de julho entrar) · Falta: parcela final R$ 3.000, "ao término do serviço" (venc quando houver previsão)
+
+### BLOCO 9 — Painel de Fluxo de Caixa (visível às duas Dras)
+**Cartão A — Envelope:** saldo livre pra comprometer (R$ 33.251,98 de 35.000) + lista de compromissos designados. Número de decisão; extrato vira só conferência.
+**Cartão B — Devolução (Néia):** três linhas fixas — Aporte recebido 35.000 · Custo bancário (juros) 24.476,32 · Total a devolver 59.476,32 (48× 1.239,09) — + contador "devolvido R$X, faltam N, próxima em DD/MM" por soma de vínculos.
+Mensagem de design: saldo em conta tem origem declarada; custo bancário explícito impede a leitura errada de "Néia lucrando sobre a clínica".
+
+---
+
+## Registro de decisões (por quê, não só o quê)
+
+- **Gabarito quase caiu por memória institucional:** classificações existiam em chat/obs, não em coluna. Cura = `natureza` no schema. (05/07)
+- **"Fantasmas" de R$2.300/2.810 eram os 5 recebimentos de 30/06** digitados só no agregado. Cura = princípio 5, um livro só. (05/07)
+- **Resíduo de R$16,99 era a mensalidade Sicoob** enterrada na linha-espelho — não arredondamento. Confirma princípio 6. (05/07)
+- **Todo número novo pode ser ponta de contrato** (35k viraram 59k; 3k viraram 13,6k). Toda despesa nova ≥ R$1.000 merece a pergunta: "é despesa ou parcela de algo maior?" — a tabela `compromissos` é onde a história inteira mora.
+- **Requisito transversal:** telas novas responsivas desktop + mobile (padrão de todos os apps).
