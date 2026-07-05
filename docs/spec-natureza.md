@@ -102,3 +102,45 @@ Mensagem de design: saldo em conta tem origem declarada; custo bancário explíc
 - **Resíduo de R$16,99 era a mensalidade Sicoob** enterrada na linha-espelho — não arredondamento. Confirma princípio 6. (05/07)
 - **Todo número novo pode ser ponta de contrato** (35k viraram 59k; 3k viraram 13,6k). Toda despesa nova ≥ R$1.000 merece a pergunta: "é despesa ou parcela de algo maior?" — a tabela `compromissos` é onde a história inteira mora.
 - **Requisito transversal:** telas novas responsivas desktop + mobile (padrão de todos os apps).
+
+---
+
+# SISTEMA PREVISTO × REALIZADO (v3 — 05/07/2026)
+
+Evolução das regras nascida do fechamento de junho; refina os Blocos 3–9. Cada regra tem **TESTE DE ACEITAÇÃO** (o número que o app reproduz). **Status 05/07: R1–R3 VERIFICADOS contra o banco ao vivo no código no ar (`7a5790b`); R4 dado ok (painel pendente); R5 a implementar; provisionado/previsto×realizado/tela a construir.**
+
+## Motor: 3 naturezas
+- `operacao` → resultado das Dras (conjunta = 50/50, ou individual = 100% de 1 Dra)
+- `capital_giro` → envelope do aporte (obra da clínica); NÃO toca as Dras
+- `exibicao` → só rastro do extrato; não conta em nada
+
+`calcDisp` soma **SOMENTE** `operacao`.
+
+**Mapeamento das naturezas antigas (travado 05/07):**
+- `imposto` → **`operacao`** (custo real das Dras, já conta).
+- `contabilidade` → **`exibicao`** (a dedução segue pelo campo `M.contabilidade`÷2; se virar `operacao`, conta 2×).
+- Lançamentos de junho (mês fechado) mantêm os tags antigos como artefato histórico (imutabilidade); a convenção de 3 naturezas vale de julho em diante (julho já está limpo).
+
+## Regras de cálculo (com teste)
+- **R1.** `calcDisp` ignora `capital_giro` e `exibicao`. **TESTE:** desp. operac. junho = **2.425,57 / 2.425,56**. ✅
+- **R2.** `ant` do mês = SÓ `res` do anterior (nunca `res+prov`). **TESTE:** `ant` julho = **3.681,18 / 6.505,08**. ✅
+- **R3.** Contabilidade = custo CONJUNTO 50/50, linha própria (`contab`÷2 por Dra), reservada mesmo antes de paga; nunca dentro de `desp`. **TESTE:** disponível julho = **1.339,18 / 5.121,88**. ✅
+- **R4.** Envelope = `SUM(receita capital_giro) − SUM(despesa capital_giro)`. **TESTE:** 35.000 − 28.194,36 = **6.805,64**. ✅ (dado; painel pendente)
+- **R5.** Um mês aberto por vez; fechar antes de abrir o próximo. **TESTE:** `mes_ref` bloqueia lançamento de outro mês nos agregados.
+
+## Provisionado vivo (a régua na digitação)
+Input de compromisso futuro com destino escrito: `"Faxineira 20/07 200 conjunta"` · `"Eletricista 15/07 1000 clinica"` · `"Diversos 20/07 50 Dany"`. A **última palavra** define a natureza automaticamente: `conjunta`→operacao 50/50 · `clinica`→capital_giro · nome da Dra→operacao individual. O provisionado **desconta do disponível ANTES do pagamento** (proteção).
+
+## Previsto × Realizado (o coração)
+- Provisionado protege pelo valor **ESTIMADO**.
+- No pagamento o **EXTRATO manda**: se real ≠ previsto, o mês corrente fecha com o **PREVISTO** (passado íntegro), e a diferença viaja pro mês seguinte como **AJUSTE** — automático no dinheiro, VISÍVEL em destaque no topo do mês. O ajuste segue a natureza original (clinica→envelope; conjunta→2 Dras; individual→1 Dra).
+  - *Ex.:* previsto eletricista 1.000 (clinica), pagou 1.150 → mês fecha com 1.000, envelope abate 1.150, +150 viaja como "ajuste eletricista" no mês seguinte.
+- **INVARIANTE DO IMPOSTO (regra travada 05/07):** pagamento de obrigação **provisionada** CONSOME a provisão/reserva — abate do bloco **PROVISIONADO**, NÃO gera despesa nova no disponível. A provisão de junho já saiu do disponível (está no `ant` de julho); se o pagamento contasse como despesa nova, cobraria 2×.
+- **Histórico linha-a-linha** por compromisso: descrição, natureza, valor PREVISTO, valor REALIZADO, data pagamento, MOTIVO da diferença (texto livre). Nunca só o consolidado do mês — a granularidade revela padrões de erro de estimativa.
+
+## Tela de 4 blocos (auto-verificação)
+`SALDO EM CONTA = DISPONÍVEL (retirável, por Dra) + PROVISIONADO (itens com dono+valor em destaque, rateio embaixo) + CAPITAL DE GIRO (envelope restante) + RESERVA MÍNIMA (1.000)`. Item provisionado pago vira histórico **MARCADO** (rastro, não some).
+**TESTE MESTRE:** os 4 blocos somados = saldo em conta, SEMPRE. Se não fecha, o `calcDisp` está errado e a tela denuncia.
+
+## Ordem de implementação
+Regras de cálculo (R1–R5) → provisionado/naturezas → previsto×realizado → tela por último. Nunca a tela antes das regras (exibiria erro em destaque).
