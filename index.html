@@ -65,15 +65,17 @@ html,body{height:100%;background:#E8E5DE;font-family:'DM Sans',sans-serif}
 .sc-name{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px}
 .sc-name.neia{color:var(--neia)}
 .sc-name.dany{color:var(--dany)}
-.sc-line{display:flex;justify-content:space-between;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.06)}
-.sc-line-l{font-size:10px;color:rgba(255,255,255,.45)}
-.sc-line-v{font-size:10px;color:rgba(255,255,255,.7)}
+.sc-line{display:flex;justify-content:space-between;align-items:baseline;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.sc-line-l{font-size:10px;color:rgba(255,255,255,.45);flex:1;min-width:0}
+.sc-line-v{font-size:10px;color:rgba(255,255,255,.7);white-space:nowrap;flex-shrink:0;text-align:right}
 .sc-disp{display:flex;flex-direction:column;align-items:flex-start;padding-top:8px;margin-top:6px;border-top:2px solid rgba(255,255,255,.15)}
 .sc-disp-l{font-size:10px;font-weight:700;color:rgba(255,255,255,.7);text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px}
 .sc-disp-v{font-family:'DM Serif Display',serif;font-size:20px;font-weight:700;color:white;line-height:1}
 .sc-ok{color:#9FE6A0;font-weight:700}
 /* Alerta de saldo negativo por Dra */
 .sc.neg{border:1.5px solid #F0A097;background:rgba(192,57,43,.22)}
+/* Mobile: empilha os cards (lado a lado fica estreito demais e trunca) */
+@media(max-width:560px){.scards{grid-template-columns:1fr;gap:12px}.sc{padding:14px 16px}.sc-line-l,.sc-line-v{font-size:11px}}
 .sc-neg{margin-top:8px;padding-top:8px;border-top:2px solid rgba(255,255,255,.18)}
 .sc-neg-l1{font-size:11px;font-weight:700;color:#FFD3CD}
 .sc-neg-l2{font-family:'DM Serif Display',serif;font-size:17px;font-weight:700;color:#fff;margin-top:5px;line-height:1.15}
