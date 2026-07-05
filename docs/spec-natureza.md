@@ -14,7 +14,7 @@ Estado ao consolidar (05/07/2026): Bloco 1 aplicado · Bloco 2 ✅ (backfill + d
 5. **Um livro só.** A trilha de lançamentos é a fonte da verdade. Agregados (`nd_saldos_mes`) tornam-se DERIVADOS da trilha após o Bloco 3 — nunca mais mantidos por fora.
 6. **Não existe resíduo inexplicável — existe lançamento sem nome.** Toda divergência se resolve nomeando linhas, não ajustando números.
 7. **Simetria:** ajustes e painéis de caixa compartilhado aparecem iguais para as duas Dras, mesmo quando afetam só uma. RLS protege dados de pacientes; caixa comum é território comum.
-8. **Provisão é reserva, não despesa.** A provisão de impostos desconta do disponível no mês de competência, mas RETORNA no mês seguinte e é consumida pelo pagamento real do tributo. Regra de carry permanente: **`ant_mês = res_mês_anterior + prov_mês_anterior`**. Sem a devolução, contar o imposto pago (princípio: caixa real pesa) cobraria cada tributo duas vezes. *(Origem: teste de fronteira do fechamento de junho, 05/07 — ver "Gabarito oficial".)*
+8. **Provisão é reserva, consumida no pagamento (MUNDO A — travado 05/07).** A provisão de impostos desconta do disponível no mês de competência e fica RESERVADA no bloco PROVISIONADO. Quando o tributo é pago, o pagamento **CONSOME essa reserva** — NÃO gera despesa nova no disponível (imposto pago sai do `calcDisp`; fica só como informação, "consome a reserva"). Carry: **`ant_mês = res_mês_anterior`** (só res; a provisão NÃO volta ao `ant`, vive no bloco PROVISIONADO até ser consumida). *(Revoga a regra anterior `ant = res + prov` (Mundo B): misturar "imposto conta" com `ant` só-res cobraria o tributo 2×; o invariante dos 4 blocos venceu. B foi decidido 05/07 mas REVERTIDO antes de produzir efeito em julho. Fronteira: **junho, fechado em B, é pedra — não reabre**; A vale de julho em diante.)*
 
 ## Gabarito oficial de junho/2026
 
@@ -117,7 +117,7 @@ Evolução das regras nascida do fechamento de junho; refina os Blocos 3–9. Ca
 `calcDisp` soma **SOMENTE** `operacao`.
 
 **Mapeamento das naturezas antigas (travado 05/07):**
-- `imposto` → **`operacao`** (custo real das Dras, já conta).
+- `imposto` → mantém `imposto`, **FORA do `calcDisp`** (Mundo A, 05/07): o pagamento consome a reserva do bloco PROVISIONADO, não desconta do disponível; aparece só como informação ("consome a reserva"). NÃO vira `operacao` — senão descontaria 2× junto com a provisão.
 - `contabilidade` → **`exibicao`** (a dedução segue pelo campo `M.contabilidade`÷2; se virar `operacao`, conta 2×).
 - Lançamentos de junho (mês fechado) mantêm os tags antigos como artefato histórico (imutabilidade); a convenção de 3 naturezas vale de julho em diante (julho já está limpo).
 
