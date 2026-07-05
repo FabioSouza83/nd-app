@@ -557,7 +557,7 @@ function calcDisp(){
         else if(t.flag==='neia') xn=Number(t.valor);
         else xd=Number(t.valor);
         en+=xn;ed+=xd;
-        despItens.push({desc:(t.descricao||'Despesa'), n:xn, d:xd});
+        despItens.push({desc:(t.descricao||'Despesa'), n:xn, d:xd, status:(t.status||'pago')});
       }
       continue;
     }
@@ -722,8 +722,13 @@ function renderDash(){
     var despBlock='<div class="sc-line"><span class="sc-line-l">(–) Despesas operac.</span><span class="sc-line-v">('+fmt(desp)+')</span></div>';
     if(despItens && despItens.length){
       for(var q=0;q<despItens.length;q++){
-        if(despItens[q].val>0)
-          despBlock+='<div class="sc-line" style="padding-left:14px;opacity:.7;font-size:12px"><span class="sc-line-l">• '+despItens[q].desc+'</span><span class="sc-line-v">('+fmt(despItens[q].val)+')</span></div>';
+        if(despItens[q].val>0){
+          var st=despItens[q].status||'pago';
+          var tag=(st==='provisionado')
+            ?'<span style="font-size:10px;color:#5a3800;background:#f0c060;border-radius:5px;padding:0 5px;margin-left:6px;font-weight:500">provisão</span>'
+            :'<span style="font-size:10px;color:#1b4d0a;background:#a9d56c;border-radius:5px;padding:0 5px;margin-left:6px;font-weight:500">ocorrido</span>';
+          despBlock+='<div class="sc-line" style="padding-left:14px;font-size:12px"><span class="sc-line-l">• '+despItens[q].desc+tag+'</span><span class="sc-line-v">('+fmt(despItens[q].val)+')</span></div>';
+        }
       }
     }
     // Mundo A: informação, NÃO desconta do disponível — o imposto pago consome a reserva (provisão).
@@ -773,8 +778,8 @@ function renderDash(){
   }
 
   var totalDisp=Math.max(0,d.neia)+Math.max(0,d.dany);
-  var despN=(d.despItens||[]).map(function(x){return {desc:x.desc,val:x.n};});
-  var despD=(d.despItens||[]).map(function(x){return {desc:x.desc,val:x.d};});
+  var despN=(d.despItens||[]).map(function(x){return {desc:x.desc,val:x.n,status:x.status};});
+  var despD=(d.despItens||[]).map(function(x){return {desc:x.desc,val:x.d,status:x.status};});
 
   return '<div class="meta">'
     +'<div class="meta-row"><span class="meta-icon">🔄</span><span class="meta-l">Atualizado em</span><span class="meta-v">'+S.META.ultima+'</span></div>'
