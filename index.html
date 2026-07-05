@@ -533,6 +533,7 @@ function calcDisp(){
   var rn=0,rd=0,dn=0,dd=0;   // lançamentos MANUAIS: receitas (rn/rd) e compras do mês (dn/dd)
   var en=0,ed=0;             // despesa OPERACIONAL de extrato do mês (natureza='operacao')
   var impn=0,impd=0;         // imposto PAGO de extrato no mês (natureza='imposto', competência anterior)
+  var despItens=[];          // itens nomeados que compõem en/ed (desfragmentar o lump na tela): {desc,n,d}
   for(var i=0;i<S.LANC.length;i++){
     var t=S.LANC[i];
     // Classificação pela NATUREZA (fim do ehImpostoOuContab por cat/texto — Bloco 3):
@@ -544,15 +545,19 @@ function calcDisp(){
       if(t.tipo!=='despesa') continue;
       if(String(t.created_at||'').slice(0,7)!==mesAtual) continue;   // só o mês corrente
       if(t.natureza==='imposto'){
-        // Imposto pago no mês pesa como despesa real. A provisão (prov_n/prov_d) é RESERVA à parte:
-        // desconta no mês de competência e RETORNA no seguinte (ant = res + prov) — não anula o pagamento.
+        // MUNDO A: imposto pago NÃO desconta do disponível — consome a reserva (bloco PROVISIONADO).
+        // impn/impd acumulam só como INFORMAÇÃO (rastro do consumo), fora da conta do disponível.
         if(t.flag==='conjunta'){var ri=rateio(t.valor);impn+=ri.n;impd+=ri.d;}
         else if(t.flag==='neia') impn+=Number(t.valor);
         else impd+=Number(t.valor);
       } else {
-        if(t.flag==='conjunta'){var re=rateio(t.valor);en+=re.n;ed+=re.d;}
-        else if(t.flag==='neia') en+=Number(t.valor);
-        else ed+=Number(t.valor);
+        // Despesa operacional: acumula E guarda o item nomeado (pra desfragmentar o lump na tela).
+        var xn=0,xd=0;
+        if(t.flag==='conjunta'){var re=rateio(t.valor);xn=re.n;xd=re.d;}
+        else if(t.flag==='neia') xn=Number(t.valor);
+        else xd=Number(t.valor);
+        en+=xn;ed+=xd;
+        despItens.push({desc:(t.descricao||'Despesa'), n:xn, d:xd});
       }
       continue;
     }
@@ -578,7 +583,7 @@ function calcDisp(){
   return {
     neia: Number(M.ant_n)+Number(M.rec_n)+rn-en-dn-Number(M.plab_n)-Number(M.prov_n)-contabMeta,
     dany: Number(M.ant_d)+Number(M.rec_d)+rd-ed-dd-Number(M.plab_d)-Number(M.prov_d)-contabMeta,
-    rn:rn, rd:rd, dn:dn, dd:dd, en:en, ed:ed, impn:impn, impd:impd, contab:contabMeta
+    rn:rn, rd:rd, dn:dn, dd:dd, en:en, ed:ed, impn:impn, impd:impd, contab:contabMeta, despItens:despItens
   };
 }
 
@@ -700,7 +705,7 @@ function renderDash(){
   var d=calcDisp();
   var M=S.MAIO;
 
-  var sCard=function(name,cls,ant,rec,desp,compras,impPago,plab,prov,contab,disp_val){
+  var sCard=function(name,cls,ant,rec,desp,despItens,compras,impPago,plab,prov,contab,disp_val){
     var neg=disp_val<0;
     var brl=function(v){ return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); };
     var deficit=neg?Math.abs(disp_val):0;
@@ -713,6 +718,14 @@ function renderDash(){
       +'<div class="sc-neg-l3">valor já considera a provisão de 6%</div>'
       +'</div>'):'';
     var comprasLine=compras>0?'<div class="sc-line"><span class="sc-line-l">(–) Compras do mês</span><span class="sc-line-v">('+fmt(compras)+')</span></div>':'';
+    // Despesas operac. desfragmentadas: subtotal + itens nomeados (Pintor, etc.), só os >0 desta Dra.
+    var despBlock='<div class="sc-line"><span class="sc-line-l">(–) Despesas operac.</span><span class="sc-line-v">('+fmt(desp)+')</span></div>';
+    if(despItens && despItens.length){
+      for(var q=0;q<despItens.length;q++){
+        if(despItens[q].val>0)
+          despBlock+='<div class="sc-line" style="padding-left:14px;opacity:.7;font-size:12px"><span class="sc-line-l">• '+despItens[q].desc+'</span><span class="sc-line-v">('+fmt(despItens[q].val)+')</span></div>';
+      }
+    }
     // Mundo A: informação, NÃO desconta do disponível — o imposto pago consome a reserva (provisão).
     var impLine=impPago>0?'<div class="sc-line" style="opacity:.75"><span class="sc-line-l">Impostos pagos <span style="font-size:10px;color:var(--gray)">(consome a reserva, não desconta)</span></span><span class="sc-line-v">'+fmt(impPago)+'</span></div>':'';
     var contabLine=contab>0?'<div class="sc-line"><span class="sc-line-l">(–) Contabilidade (50%)</span><span class="sc-line-v">('+fmt(contab)+')</span></div>':'';
@@ -721,7 +734,7 @@ function renderDash(){
       +'<div class="sc-name '+cls+'">'+name+'</div>'
       +'<div class="sc-line"><span class="sc-line-l">Saldo anterior</span><span class="sc-line-v">'+fmt(ant)+'</span></div>'
       +'<div class="sc-line"><span class="sc-line-l">+ Receitas mês</span><span class="sc-line-v">'+fmt(rec)+'</span></div>'
-      +'<div class="sc-line"><span class="sc-line-l">(–) Despesas operac.</span><span class="sc-line-v">('+fmt(desp)+')</span></div>'
+      +despBlock
       +comprasLine
       +plabLine
       +'<div class="sc-line"><span class="sc-line-l">(–) Provisão (impostos)<br><span style="font-size:10px;color:var(--gray);font-weight:400">reserva — consumida no pagamento</span></span><span class="sc-line-v">('+fmt(prov)+')</span></div>'
@@ -760,6 +773,8 @@ function renderDash(){
   }
 
   var totalDisp=Math.max(0,d.neia)+Math.max(0,d.dany);
+  var despN=(d.despItens||[]).map(function(x){return {desc:x.desc,val:x.n};});
+  var despD=(d.despItens||[]).map(function(x){return {desc:x.desc,val:x.d};});
 
   return '<div class="meta">'
     +'<div class="meta-row"><span class="meta-icon">🔄</span><span class="meta-l">Atualizado em</span><span class="meta-v">'+S.META.ultima+'</span></div>'
@@ -769,8 +784,8 @@ function renderDash(){
     +'<div class="hero">'
     +'<div class="hero-label">Disponível para retirada — '+fmtMesRef(S.MAIO.mes_ref)+'</div>'
     +'<div class="scards">'
-    +sCard('Néia','neia',Number(M.ant_n),Number(M.rec_n)+d.rn,d.en,d.dn,d.impn,Number(M.plab_n),Number(M.prov_n),d.contab,d.neia)
-    +sCard('Dany','dany',Number(M.ant_d),Number(M.rec_d)+d.rd,d.ed,d.dd,d.impd,Number(M.plab_d),Number(M.prov_d),d.contab,d.dany)
+    +sCard('Néia','neia',Number(M.ant_n),Number(M.rec_n)+d.rn,d.en,despN,d.dn,d.impn,Number(M.plab_n),Number(M.prov_n),d.contab,d.neia)
+    +sCard('Dany','dany',Number(M.ant_d),Number(M.rec_d)+d.rd,d.ed,despD,d.dd,d.impd,Number(M.plab_d),Number(M.prov_d),d.contab,d.dany)
     +'</div>'
     +'<div class="hero-tl">Total disponível</div>'
     +'<div class="hero-tv">'+fmt(totalDisp)+'</div>'
