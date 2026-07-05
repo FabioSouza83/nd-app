@@ -571,9 +571,13 @@ function calcDisp(){
   var M=S.MAIO;
   // Custos fixos da empresa rateados 50/50 entre as dras (hoje: contabilidade; futuro: água/luz/internet)
   var contabMeta = (M.contabilidade!=null) ? Number(M.contabilidade)/2 : 0;
+  // MUNDO A (laço do imposto, 05/07): imposto pago NÃO desconta do disponível — ele CONSOME a
+  // reserva (bloco PROVISIONADO), não gera despesa nova. A provisão já saiu no mês de competência;
+  // contar o pagamento de novo cobraria 2×. impn/impd seguem acumulados só como INFORMAÇÃO (rastro do
+  // consumo da reserva), fora da conta do disponível.
   return {
-    neia: Number(M.ant_n)+Number(M.rec_n)+rn-en-impn-dn-Number(M.plab_n)-Number(M.prov_n)-contabMeta,
-    dany: Number(M.ant_d)+Number(M.rec_d)+rd-ed-impd-dd-Number(M.plab_d)-Number(M.prov_d)-contabMeta,
+    neia: Number(M.ant_n)+Number(M.rec_n)+rn-en-dn-Number(M.plab_n)-Number(M.prov_n)-contabMeta,
+    dany: Number(M.ant_d)+Number(M.rec_d)+rd-ed-dd-Number(M.plab_d)-Number(M.prov_d)-contabMeta,
     rn:rn, rd:rd, dn:dn, dd:dd, en:en, ed:ed, impn:impn, impd:impd, contab:contabMeta
   };
 }
@@ -709,7 +713,8 @@ function renderDash(){
       +'<div class="sc-neg-l3">valor já considera a provisão de 6%</div>'
       +'</div>'):'';
     var comprasLine=compras>0?'<div class="sc-line"><span class="sc-line-l">(–) Compras do mês</span><span class="sc-line-v">('+fmt(compras)+')</span></div>':'';
-    var impLine=impPago>0?'<div class="sc-line"><span class="sc-line-l">(–) Impostos pagos (comp. anterior)</span><span class="sc-line-v">('+fmt(impPago)+')</span></div>':'';
+    // Mundo A: informação, NÃO desconta do disponível — o imposto pago consome a reserva (provisão).
+    var impLine=impPago>0?'<div class="sc-line" style="opacity:.75"><span class="sc-line-l">Impostos pagos <span style="font-size:10px;color:var(--gray)">(consome a reserva, não desconta)</span></span><span class="sc-line-v">'+fmt(impPago)+'</span></div>':'';
     var contabLine=contab>0?'<div class="sc-line"><span class="sc-line-l">(–) Contabilidade (50%)</span><span class="sc-line-v">('+fmt(contab)+')</span></div>':'';
     var plabLine=plab>0?'<div class="sc-line"><span class="sc-line-l">(–) Pró-labore</span><span class="sc-line-v">('+fmt(plab)+')</span></div>':'';
     return '<div class="sc '+cls+(neg?' neg':'')+'">'
@@ -717,10 +722,10 @@ function renderDash(){
       +'<div class="sc-line"><span class="sc-line-l">Saldo anterior</span><span class="sc-line-v">'+fmt(ant)+'</span></div>'
       +'<div class="sc-line"><span class="sc-line-l">+ Receitas mês</span><span class="sc-line-v">'+fmt(rec)+'</span></div>'
       +'<div class="sc-line"><span class="sc-line-l">(–) Despesas operac.</span><span class="sc-line-v">('+fmt(desp)+')</span></div>'
-      +impLine
       +comprasLine
       +plabLine
-      +'<div class="sc-line"><span class="sc-line-l">(–) Provisão (impostos)<br><span style="font-size:10px;color:var(--gray);font-weight:400">reserva — retorna no mês seguinte</span></span><span class="sc-line-v">('+fmt(prov)+')</span></div>'
+      +'<div class="sc-line"><span class="sc-line-l">(–) Provisão (impostos)<br><span style="font-size:10px;color:var(--gray);font-weight:400">reserva — consumida no pagamento</span></span><span class="sc-line-v">('+fmt(prov)+')</span></div>'
+      +impLine
       +contabLine
       +(neg?'':'<div class="sc-disp"><span class="sc-disp-l"><span class="sc-ok">✓</span> Disponível agora</span><span class="sc-disp-v">'+fmt(disp_val)+'</span></div>')
       +alertTxt+'</div>';
