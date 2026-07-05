@@ -27,7 +27,7 @@ Estado ao consolidar (05/07/2026): Bloco 1 aplicado · Bloco 2 ✅ (backfill + d
 
 *Centavo do rateio:* o gabarito foi PRIMEIRO declarado 3.681,19/6.505,08 (total 10.186,27) — 1 centavo fantasma, o mesmo princípio 6 aplicado ao próprio auditor. O R$ 16,99 do Sicoob é conjunto e tem centavos ímpares (8,495/Dra); o centavo tem que cair numa só. **Regra determinística (código + spec): centavo ímpar de rateio conjunto → Néia** — fundamento: espelha o agregado auditado de junho (`desp_n` 2.425,57 > `desp_d` 2.425,56). Total real = 10.186,26.
 
-Saques pós-fechamento de junho: retenção prudencial de R$ 1.300/Dra (pagamento do pintor de 03/07) → **Néia saca R$ 2.381,18 · Dany saca R$ 5.205,08**.
+**Junho FECHADO no app (05/07)** com esse resultado. Saques de junho: retenção de **R$ 2.800/Dra** (pintor de julho: 2.600 pagos 02/07 + 3.000 finais 06/07) → **Néia saca R$ 881,18 · Dany saca R$ 3.705,08**. *(Revoga a retenção anterior de 1.300/Dra — 2.381,18/5.205,08 — quando a quitação do pintor era só parcial.)*
 
 ## Classificações definitivas (junho)
 
@@ -86,7 +86,7 @@ Campos: `valor_principal`, `valor_total`, `pago_acumulado` (por vínculo `compro
 - Parcela = despesa conjunta 50/50, `operacao`. **NUNCA deduz do envelope** (envelope diminui por designação de capital; devolução diminui por parcela paga — livros independentes)
 
 **Compromisso 2 — Contrato do pintor:**
-- Total: R$ 13.600 (12.000 + 1.600) · Pago: mai 5.000 (id 28 ✓ contado) + jun 3.000 (id 53 ✓ contado) + jul 2.600 (03/07, lançar quando extrato de julho entrar) · Falta: parcela final R$ 3.000, "ao término do serviço" (venc quando houver previsão)
+- Total: R$ 13.600 (12.000 + 1.600) · Pago: mai 5.000 (id 28 ✓ contado) + jun 3.000 (id 53 ✓ contado) + jul 2.600 (02/07) + jul 3.000 finais (06/07) → **QUITADO 06/07, contrato completo**. Lançar as parcelas de julho quando o extrato de julho entrar.
 
 ### BLOCO 9 — Painel de Fluxo de Caixa (visível às duas Dras)
 **Cartão A — Envelope:** saldo livre pra comprometer (R$ 33.251,98 de 35.000) + lista de compromissos designados. Número de decisão; extrato vira só conferência.
