@@ -576,6 +576,12 @@ function calcDisp(){
   var M=S.MAIO;
   // Custos fixos da empresa rateados 50/50 entre as dras (hoje: contabilidade; futuro: água/luz/internet)
   var contabMeta = (M.contabilidade!=null) ? Number(M.contabilidade)/2 : 0;
+  // A contabilidade do mês já debitou na conta? (lançamento natureza=contabilidade, status pago).
+  // Se sim → ocorrido (verde); se não → ainda é reserva (laranja). A provisão de impostos é sempre reserva.
+  var contabPago=false;
+  for(var ci=0;ci<S.LANC.length;ci++){var ct=S.LANC[ci];
+    if(String(ct.created_at||'').slice(0,7)===mesAtual && ct.natureza==='contabilidade' && (ct.status||'pago')==='pago'){contabPago=true;break;}
+  }
   // MUNDO A (laço do imposto, 05/07): imposto pago NÃO desconta do disponível — ele CONSOME a
   // reserva (bloco PROVISIONADO), não gera despesa nova. A provisão já saiu no mês de competência;
   // contar o pagamento de novo cobraria 2×. impn/impd seguem acumulados só como INFORMAÇÃO (rastro do
@@ -583,7 +589,7 @@ function calcDisp(){
   return {
     neia: Number(M.ant_n)+Number(M.rec_n)+rn-en-dn-Number(M.plab_n)-Number(M.prov_n)-contabMeta,
     dany: Number(M.ant_d)+Number(M.rec_d)+rd-ed-dd-Number(M.plab_d)-Number(M.prov_d)-contabMeta,
-    rn:rn, rd:rd, dn:dn, dd:dd, en:en, ed:ed, impn:impn, impd:impd, contab:contabMeta, despItens:despItens
+    rn:rn, rd:rd, dn:dn, dd:dd, en:en, ed:ed, impn:impn, impd:impd, contab:contabMeta, despItens:despItens, contabPago:contabPago
   };
 }
 
@@ -705,7 +711,7 @@ function renderDash(){
   var d=calcDisp();
   var M=S.MAIO;
 
-  var sCard=function(name,cls,ant,rec,desp,despItens,compras,impPago,plab,prov,contab,disp_val){
+  var sCard=function(name,cls,ant,rec,desp,despItens,compras,impPago,plab,prov,contab,contabPago,disp_val){
     var neg=disp_val<0;
     var brl=function(v){ return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); };
     var deficit=neg?Math.abs(disp_val):0;
@@ -717,23 +723,23 @@ function renderDash(){
       +'<div class="sc-neg-l2">Para zerar este mês, fature '+brl(meta)+'</div>'
       +'<div class="sc-neg-l3">valor já considera a provisão de 6%</div>'
       +'</div>'):'';
+    // Marcador ÚNICO em toda linha: verde = já debitou na conta (ocorrido); laranja = reserva (provisão).
+    var tagOcor='<span style="font-size:10px;color:#1b4d0a;background:#a9d56c;border-radius:5px;padding:0 5px;margin-left:6px;font-weight:500">ocorrido</span>';
+    var tagProv='<span style="font-size:10px;color:#5a3800;background:#f0c060;border-radius:5px;padding:0 5px;margin-left:6px;font-weight:500">provisão</span>';
     var comprasLine=compras>0?'<div class="sc-line"><span class="sc-line-l">(–) Compras do mês</span><span class="sc-line-v">('+fmt(compras)+')</span></div>':'';
     // Despesas operac. desfragmentadas: subtotal + itens nomeados (Pintor, etc.), só os >0 desta Dra.
     var despBlock='<div class="sc-line"><span class="sc-line-l">(–) Despesas operac.</span><span class="sc-line-v">('+fmt(desp)+')</span></div>';
     if(despItens && despItens.length){
       for(var q=0;q<despItens.length;q++){
         if(despItens[q].val>0){
-          var st=despItens[q].status||'pago';
-          var tag=(st==='provisionado')
-            ?'<span style="font-size:10px;color:#5a3800;background:#f0c060;border-radius:5px;padding:0 5px;margin-left:6px;font-weight:500">provisão</span>'
-            :'<span style="font-size:10px;color:#1b4d0a;background:#a9d56c;border-radius:5px;padding:0 5px;margin-left:6px;font-weight:500">ocorrido</span>';
+          var tag=((despItens[q].status||'pago')==='provisionado')?tagProv:tagOcor;
           despBlock+='<div class="sc-line" style="padding-left:14px;font-size:12px"><span class="sc-line-l">• '+despItens[q].desc+tag+'</span><span class="sc-line-v">('+fmt(despItens[q].val)+')</span></div>';
         }
       }
     }
     // Mundo A: informação, NÃO desconta do disponível — o imposto pago consome a reserva (provisão).
     var impLine=impPago>0?'<div class="sc-line" style="opacity:.75"><span class="sc-line-l">Impostos pagos <span style="font-size:10px;color:var(--gray)">(consome a reserva, não desconta)</span></span><span class="sc-line-v">'+fmt(impPago)+'</span></div>':'';
-    var contabLine=contab>0?'<div class="sc-line"><span class="sc-line-l">(–) Contabilidade (50%)</span><span class="sc-line-v">('+fmt(contab)+')</span></div>':'';
+    var contabLine=contab>0?'<div class="sc-line"><span class="sc-line-l">(–) Contabilidade (50%)'+(contabPago?tagOcor:tagProv)+'</span><span class="sc-line-v">('+fmt(contab)+')</span></div>':'';
     var plabLine=plab>0?'<div class="sc-line"><span class="sc-line-l">(–) Pró-labore</span><span class="sc-line-v">('+fmt(plab)+')</span></div>':'';
     return '<div class="sc '+cls+(neg?' neg':'')+'">'
       +'<div class="sc-name '+cls+'">'+name+'</div>'
@@ -742,7 +748,7 @@ function renderDash(){
       +despBlock
       +comprasLine
       +plabLine
-      +'<div class="sc-line"><span class="sc-line-l">(–) Provisão (impostos)<br><span style="font-size:10px;color:var(--gray);font-weight:400">reserva — consumida no pagamento</span></span><span class="sc-line-v">('+fmt(prov)+')</span></div>'
+      +'<div class="sc-line"><span class="sc-line-l">(–) Provisão (impostos)'+tagProv+'<br><span style="font-size:10px;color:var(--gray);font-weight:400">reserva — consumida no pagamento</span></span><span class="sc-line-v">('+fmt(prov)+')</span></div>'
       +impLine
       +contabLine
       +(neg?'':'<div class="sc-disp"><span class="sc-disp-l"><span class="sc-ok">✓</span> Disponível agora</span><span class="sc-disp-v">'+fmt(disp_val)+'</span></div>')
@@ -789,8 +795,8 @@ function renderDash(){
     +'<div class="hero">'
     +'<div class="hero-label">Disponível para retirada — '+fmtMesRef(S.MAIO.mes_ref)+'</div>'
     +'<div class="scards">'
-    +sCard('Néia','neia',Number(M.ant_n),Number(M.rec_n)+d.rn,d.en,despN,d.dn,d.impn,Number(M.plab_n),Number(M.prov_n),d.contab,d.neia)
-    +sCard('Dany','dany',Number(M.ant_d),Number(M.rec_d)+d.rd,d.ed,despD,d.dd,d.impd,Number(M.plab_d),Number(M.prov_d),d.contab,d.dany)
+    +sCard('Néia','neia',Number(M.ant_n),Number(M.rec_n)+d.rn,d.en,despN,d.dn,d.impn,Number(M.plab_n),Number(M.prov_n),d.contab,d.contabPago,d.neia)
+    +sCard('Dany','dany',Number(M.ant_d),Number(M.rec_d)+d.rd,d.ed,despD,d.dd,d.impd,Number(M.plab_d),Number(M.prov_d),d.contab,d.contabPago,d.dany)
     +'</div>'
     +'<div class="hero-tl">Total disponível</div>'
     +'<div class="hero-tv">'+fmt(totalDisp)+'</div>'
