@@ -1,7 +1,7 @@
 # SPEC v2 — ND Financeiro: `natureza` + Fluxo de Caixa + Compromissos
 **Arquivo canônico. Deve viver no repositório (`docs/spec-natureza.md`) e ser emendado por commit, nunca por memória de conversa.**
 
-Estado ao consolidar (05/07/2026): Bloco 1 aplicado · backfill + delete id 54 + gate em execução · Blocos 3–9 pendentes.
+Estado ao consolidar (05/07/2026): Bloco 1 aplicado · Bloco 2 ✅ (backfill + delete id 54 + gate provado a menos da linha Sicoob) · Blocos 3–9 pendentes.
 
 ---
 
@@ -41,8 +41,8 @@ Saques pós-fechamento de junho: retenção prudencial de R$ 1.300/Dra (pagament
 ### BLOCO 1 — Schema ✅ (aplicado 05/07)
 Coluna `natureza` text NOT NULL DEFAULT 'operacao', CHECK nos 5 valores. Default no banco = rede de segurança (item esquecido nasce visível).
 
-### BLOCO 2 — Backfill + gate (em execução)
-Backfill pela tabela de classificações acima. `calcDispV2` paralela lê APENAS `natureza` (timing/rateio inalterados: `origem`, `tipo`, `created_at`, `venc`, `flag`). **Gate:** calcDispV2(junho) = 3.353,08 / 6.302,28 exato. Sem gate verde, nada avança.
+### BLOCO 2 — Backfill + gate ✅ (05/07/2026)
+Backfill aplicado pela tabela de classificações acima; id 54 deletado. Reconciliação trilha × agregado provada linha a linha: receita bate ao centavo, despesa bate a menos da mensalidade Sicoob R$16,99 (que não tem lançamento próprio ainda — adiada por sequenciamento pro Bloco 3, ver pendência acima). Gate = **3.353,08 / 6.302,28** confirmado. `calcDispV2` lê `natureza` (timing/rateio inalterados: `origem`, `tipo`, `created_at`, `venc`, `flag`).
 
 ### BLOCO 3 — Refatorar calcDisp (commit isolado)
 calcDispV2 vira o calcDisp. `ehImpostoOuContab` morre. Junto no deploy: lançamento R$16,99 (acima) e início da derivação do `nd_saldos_mes` a partir da trilha (view/recálculo — princípio 5). Aceite: gabarito reproduzido + diff nomeado zero nos demais meses.
