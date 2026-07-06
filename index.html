@@ -788,9 +788,15 @@ function renderDash(){
   var totalDisp=Math.max(0,d.neia)+Math.max(0,d.dany);
   var despN=(d.despItens||[]).map(function(x){return {desc:x.desc,val:x.n,status:x.status};});
   var despD=(d.despItens||[]).map(function(x){return {desc:x.desc,val:x.d,status:x.status};});
+  // "Atualizado em" é DERIVADO (fonte, não digitação): lê o created_at do lançamento mais recente
+  // e se formata sozinho. Todo lançamento novo atualiza o banner — igual os valores derivam da trilha.
+  var maxTs='';
+  for(var mi=0;mi<S.LANC.length;mi++){var cc=String(S.LANC[mi].created_at||'');if(cc>maxTs)maxTs=cc;}
+  var atualizadoEm = S.META && S.META.ultima ? S.META.ultima : '—';
+  if(maxTs){var dtu=new Date(maxTs.replace(' ','T'));if(!isNaN(dtu.getTime()))atualizadoEm=dtu.toLocaleString('pt-BR',{day:'2-digit',month:'2-digit',year:'numeric',hour:'2-digit',minute:'2-digit'});}
 
   return '<div class="meta">'
-    +'<div class="meta-row"><span class="meta-icon">🔄</span><span class="meta-l">Atualizado em</span><span class="meta-v">'+S.META.ultima+'</span></div>'
+    +'<div class="meta-row"><span class="meta-icon">🔄</span><span class="meta-l">Atualizado em</span><span class="meta-v">'+atualizadoEm+'</span></div>'
     +'<div class="meta-row"><span class="meta-icon">📋</span><span class="meta-l">Base</span><span class="meta-v">'+S.META.base+'</span></div>'
     +'<div class="meta-row"><span class="meta-icon">📅</span><span class="meta-l">Próxima atualização</span><span class="meta-v">'+S.META.proxima+'</span></div>'
     +'</div>'
