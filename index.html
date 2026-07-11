@@ -864,7 +864,7 @@ function renderDash(){
       +'<div class="evo-v" style="color:#ccc">—</div></div>';
   }
 
-  var ultimos=S.LANC.slice(-8).reverse();
+  var ultimos=S.LANC.filter(function(t){return t.natureza!=='exibicao';}).slice(-8).reverse();
   var txHtml='';
   if(ultimos.length===0){
     txHtml='<div class="empty"><div style="font-size:36px;opacity:.3;margin-bottom:10px">📭</div><p>Nenhum lançamento ainda</p></div>';
