@@ -750,7 +750,7 @@ function renderProjecao(){
     if(!mm) continue;
     var key=mm[1].trim();
     if(!fam[key]) fam[key]={nome:key, parcelas:[], total:parseInt(mm[3],10)};
-    fam[key].parcelas.push({id:t.id, valor:Number(t.valor), venc:t.venc, vmes:compMes(t), num:parseInt(mm[2],10), status:t.status});
+    fam[key].parcelas.push({id:t.id, valor:Number(t.valor), venc:t.venc, vmes:compMes(t), num:parseInt(mm[2],10), status:t.status, natureza:t.natureza, pago_em:t.pago_em});
   }
   var keys=Object.keys(fam);
   if(!keys.length) return '';
@@ -773,8 +773,12 @@ function renderProjecao(){
       tag = atual.status==='pago'
         ? '<span style="font-size:10px;color:#1b4d0a;background:#a9d56c;border-radius:5px;padding:0 5px;margin-left:6px;font-weight:500">pago</span>'
         : '<span style="font-size:10px;color:#5a3800;background:#f0c060;border-radius:5px;padding:0 5px;margin-left:6px;font-weight:500">debita</span>';
-      // Botão de baixa: SÓ admin, SÓ se ainda provisionado. (Segurança real é no banco: nd_baixa checa papel.)
-      if(atual.status==='provisionado' && S.papel==='admin' && atual.id!=null){
+      // Por parcela (id específico): pago -> selo "Pago em [data]"; operacao+provisionado (+admin) -> botão.
+      if(atual.status==='pago'){
+        var pd = atual.pago_em ? new Date(String(atual.pago_em).replace(' ','T')) : null;
+        var pdTxt = (pd && !isNaN(pd.getTime())) ? pd.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}) : String(atual.venc||'').slice(0,5);
+        baixaBtn='<div style="margin-top:6px;font-size:11px;font-weight:500;color:var(--green)">✓ Pago em '+pdTxt+'</div>';
+      } else if(atual.natureza==='operacao' && atual.status==='provisionado' && S.papel==='admin' && atual.id!=null){
         baixaBtn='<div style="margin-top:6px"><button onclick="darBaixa('+atual.id+')" style="font-size:11px;padding:5px 12px;border-radius:8px;border:none;background:var(--green);color:#fff;font-weight:500;cursor:pointer">✓ Dar baixa (marcar pago)</button></div>';
       }
     } else {
@@ -972,12 +976,16 @@ async function salvarCaixa(){
 // Baixa de compromisso provisionado (status -> 'pago'). SÓ admin. A segurança REAL está no banco
 // (função nd_baixa checa papel); o botão escondido é só conveniência. Não altera valores nem agregados.
 async function darBaixa(id){
-  if(!confirm('Dar baixa nesta parcela?\n\nO status vai de "provisão" para "pago". Não altera valores nem o disponível — só marca que o dinheiro saiu de fato.')) return;
+  var t=null; for(var i=0;i<S.LANC.length;i++){ if(S.LANC[i].id===id){ t=S.LANC[i]; break; } }
+  if(!t){ showToast('Lançamento não encontrado.',true); return; }
+  var venc = t.venc ? String(t.venc).slice(0,5) : (t.data||'');
+  var valor = 'R$ '+Number(t.valor).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
+  if(!confirm('Dar baixa: '+(t.descricao||'lançamento')+' — '+valor+', venc '+venc+'?\n\nMarca como PAGO. Não altera valores nem o disponível.')) return;
   try{
     var res=await sb.rpc('nd_baixa',{p_id:id});
     if(res.error) throw new Error(res.error.message);
-    for(var i=0;i<S.LANC.length;i++){ if(S.LANC[i].id===id){ S.LANC[i].status='pago'; break; } }
-    showToast('Baixa registrada — parcela marcada como paga.');
+    t.status='pago'; t.pago_em=new Date().toISOString();
+    showToast('Baixa registrada — '+(t.descricao||'parcela')+' marcada como paga.');
     render();
   }catch(e){
     console.error('Erro baixa:',e);
