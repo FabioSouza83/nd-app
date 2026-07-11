@@ -535,6 +535,16 @@ function vencMes(v){
   if(/^\d{2}\/\d{2}\/\d{4}/.test(s)) return s.slice(6,10)+'-'+s.slice(3,5);
   return s.slice(0,7);
 }
+// Competência 'YYYY-MM' de um lançamento. REGRA DO SISTEMA: competência (venc/data/em) manda,
+// created_at é só auditoria — um lançamento criado em julho pode pertencer a junho (fechamento 2x/sem).
+function compMes(t){
+  if(t.venc) return vencMes(t.venc);
+  var dt=String(t.data||t.em||'');
+  var yr=String(t.created_at||'').slice(0,4);
+  if(/^\d{2}\/\d{2}\/\d{4}/.test(dt)) return dt.slice(6,10)+'-'+dt.slice(3,5);
+  if(/^\d{2}\/\d{2}/.test(dt) && yr) return yr+'-'+dt.slice(3,5);
+  return String(t.created_at||'').slice(0,7);
+}
 function calcDisp(){
   // Mês de referência atual ('YYYY-MM'): compras/parcelas com vencimento FUTURO não entram no disponível agora
   var mesAtual = (S.MAIO && S.MAIO.mes_ref) ? String(S.MAIO.mes_ref).slice(0,7) : '';
@@ -551,7 +561,7 @@ function calcDisp(){
     if(t.origem==='extrato'){
       // Receita de extrato continua representada por M.rec_n / M.rec_d (agregado derivado da trilha).
       if(t.tipo!=='despesa') continue;
-      if(String(t.created_at||'').slice(0,7)!==mesAtual) continue;   // só o mês corrente
+      if(compMes(t)!==mesAtual) continue;   // só o mês corrente (por COMPETÊNCIA, não created_at)
       if(t.natureza==='imposto'){
         // MUNDO A: imposto pago NÃO desconta do disponível — consome a reserva (bloco PROVISIONADO).
         // impn/impd acumulam só como INFORMAÇÃO (rastro do consumo), fora da conta do disponível.
@@ -576,7 +586,7 @@ function calcDisp(){
       // Despesa MANUAL (parcela). Régua 13: natureza='operacao' (pago OU provisionado) DEBITA,
       // independente de origem — a parcela do mês vem como 'operacao', as futuras como 'exibicao'
       // (já saíram no topo). Competência = venc (só o mês corrente debita; não conta em outro mês).
-      var vmes = t.venc ? vencMes(t.venc) : String(t.created_at||'').slice(0,7);
+      var vmes = compMes(t);
       if(mesAtual && vmes && vmes!==mesAtual) continue;
       if(t.natureza==='imposto'){
         if(t.flag==='conjunta'){var rmi=rateio(t.valor);impn+=rmi.n;impd+=rmi.d;}
