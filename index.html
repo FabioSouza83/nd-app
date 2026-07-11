@@ -529,6 +529,12 @@ function rateio(valor){
   var d=Math.floor(c/2);
   return { n:(c-d)/100, d:d/100 };
 }
+// Competência 'YYYY-MM' de um venc, aceitando 'DD/MM/YYYY' e 'YYYY-MM-DD'.
+function vencMes(v){
+  var s=String(v||'');
+  if(/^\d{2}\/\d{2}\/\d{4}/.test(s)) return s.slice(6,10)+'-'+s.slice(3,5);
+  return s.slice(0,7);
+}
 function calcDisp(){
   // Mês de referência atual ('YYYY-MM'): compras/parcelas com vencimento FUTURO não entram no disponível agora
   var mesAtual = (S.MAIO && S.MAIO.mes_ref) ? String(S.MAIO.mes_ref).slice(0,7) : '';
@@ -567,12 +573,23 @@ function calcDisp(){
       if(t.flag==='neia') rn+=Number(t.valor);
       else rd+=Number(t.valor);
     } else {
-      // Despesa manual parcelada/futura: só reduz o disponível quando vence neste mês ou antes
-      var vmes = t.venc ? String(t.venc).slice(0,7) : null;
-      if(vmes && mesAtual && vmes > mesAtual) continue;
-      if(t.flag==='conjunta'){var rc=rateio(t.valor);dn+=rc.n;dd+=rc.d;}
-      else if(t.flag==='neia') dn+=Number(t.valor);
-      else dd+=Number(t.valor);
+      // Despesa MANUAL (parcela). Régua 13: natureza='operacao' (pago OU provisionado) DEBITA,
+      // independente de origem — a parcela do mês vem como 'operacao', as futuras como 'exibicao'
+      // (já saíram no topo). Competência = venc (só o mês corrente debita; não conta em outro mês).
+      var vmes = t.venc ? vencMes(t.venc) : String(t.created_at||'').slice(0,7);
+      if(mesAtual && vmes && vmes!==mesAtual) continue;
+      if(t.natureza==='imposto'){
+        if(t.flag==='conjunta'){var rmi=rateio(t.valor);impn+=rmi.n;impd+=rmi.d;}
+        else if(t.flag==='neia') impn+=Number(t.valor);
+        else impd+=Number(t.valor);
+      } else {
+        var mxn=0,mxd=0;
+        if(t.flag==='conjunta'){var rm=rateio(t.valor);mxn=rm.n;mxd=rm.d;}
+        else if(t.flag==='neia') mxn=Number(t.valor);
+        else mxd=Number(t.valor);
+        en+=mxn;ed+=mxd;
+        despItens.push({desc:(t.descricao||'Despesa'), n:mxn, d:mxd, status:(t.status||'pago')});
+      }
     }
   }
   var M=S.MAIO;
