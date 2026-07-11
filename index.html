@@ -775,21 +775,21 @@ function renderProjecao(){
         : '<span style="font-size:10px;color:#5a3800;background:#f0c060;border-radius:5px;padding:0 5px;margin-left:6px;font-weight:500">debita</span>';
       // Botão de baixa: SÓ admin, SÓ se ainda provisionado. (Segurança real é no banco: nd_baixa checa papel.)
       if(atual.status==='provisionado' && S.papel==='admin' && atual.id!=null){
-        baixaBtn='<div style="margin-top:6px"><button onclick="darBaixa('+atual.id+')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #a9d56c;background:transparent;color:#a9d56c;cursor:pointer">✓ Dar baixa (marcar pago)</button></div>';
+        baixaBtn='<div style="margin-top:6px"><button onclick="darBaixa('+atual.id+')" style="font-size:11px;padding:5px 12px;border-radius:8px;border:none;background:var(--green);color:#fff;font-weight:500;cursor:pointer">✓ Dar baixa (marcar pago)</button></div>';
       }
     } else {
       val='+'+brl(perDra)+'/Dra';
       sub='a partir de '+String(primeira.venc||'').slice(0,5)+' · não pesa '+mesRefCurto(mesAtual);
       tag='<span style="font-size:10px;color:#22303f;background:#c9d3e2;border-radius:5px;padding:0 5px;margin-left:6px;font-weight:500">futuro</span>';
     }
-    rows+='<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)">'
-      +'<div style="min-width:0"><div style="font-size:13px;color:rgba(255,255,255,.85)">'+f.nome+tag+'</div>'
-      +'<div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:2px">'+sub+'</div>'+baixaBtn+'</div>'
-      +'<div style="font-size:13px;color:rgba(255,255,255,.8);white-space:nowrap;flex-shrink:0">'+val+'</div></div>';
+    rows+='<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid #EFEFEF">'
+      +'<div style="min-width:0"><div style="font-size:13px;font-weight:500;color:var(--navy)">'+f.nome+tag+'</div>'
+      +'<div style="font-size:11px;color:var(--gray);margin-top:2px">'+sub+'</div>'+baixaBtn+'</div>'
+      +'<div style="font-size:13px;font-weight:500;color:var(--navy);white-space:nowrap;flex-shrink:0">'+val+'</div></div>';
   }
-  var sintese='<div style="display:flex;justify-content:space-between;gap:10px;padding-top:10px;margin-top:4px;border-top:2px solid rgba(255,255,255,.15)">'
-    +'<span style="font-size:12px;color:rgba(255,255,255,.7)">Peso fixo mensal a partir de '+mesRefCurto(inicioMax)+'</span>'
-    +'<span style="font-size:15px;font-weight:700;color:#f0a94a;white-space:nowrap">'+brl(soma)+'/Dra</span></div>';
+  var sintese='<div style="display:flex;justify-content:space-between;gap:10px;padding-top:10px;margin-top:4px;border-top:2px solid rgba(27,42,74,.12)">'
+    +'<span style="font-size:12px;color:var(--navy)">Peso fixo mensal a partir de '+mesRefCurto(inicioMax)+'</span>'
+    +'<span style="font-size:15px;font-weight:700;color:var(--amber);white-space:nowrap">'+brl(soma)+'/Dra</span></div>';
   return '<div class="card"><div class="card-title">Projeção de Compromissos</div>'+rows+sintese+'</div>';
 }
 function renderDash(){
