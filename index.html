@@ -750,7 +750,7 @@ function renderProjecao(){
     if(!mm) continue;
     var key=mm[1].trim();
     if(!fam[key]) fam[key]={nome:key, parcelas:[], total:parseInt(mm[3],10)};
-    fam[key].parcelas.push({valor:Number(t.valor), venc:t.venc, vmes:compMes(t), num:parseInt(mm[2],10), status:t.status});
+    fam[key].parcelas.push({id:t.id, valor:Number(t.valor), venc:t.venc, vmes:compMes(t), num:parseInt(mm[2],10), status:t.status});
   }
   var keys=Object.keys(fam);
   if(!keys.length) return '';
@@ -765,11 +765,18 @@ function renderProjecao(){
     for(var p=0;p<f.parcelas.length;p++){ if(f.parcelas[p].status==='pago') pagas++; if(!atual&&f.parcelas[p].vmes===mesAtual) atual=f.parcelas[p]; }
     var primeira=f.parcelas[0];
     soma+=perDra; if(primeira.vmes>inicioMax) inicioMax=primeira.vmes;
-    var val, sub, tag;
+    var val, sub, tag, baixaBtn='';
     if(atual){
       val=brl(perDra)+'/Dra';
-      sub='parcela '+pad2(atual.num)+'/'+f.total+' · venc '+String(atual.venc||'').slice(0,5)+' · já no disponível';
-      tag='<span style="font-size:10px;color:#5a3800;background:#f0c060;border-radius:5px;padding:0 5px;margin-left:6px;font-weight:500">debita</span>';
+      var estado = atual.status==='pago' ? ' · pago' : ' · já no disponível';
+      sub='parcela '+pad2(atual.num)+'/'+f.total+' · venc '+String(atual.venc||'').slice(0,5)+estado;
+      tag = atual.status==='pago'
+        ? '<span style="font-size:10px;color:#1b4d0a;background:#a9d56c;border-radius:5px;padding:0 5px;margin-left:6px;font-weight:500">pago</span>'
+        : '<span style="font-size:10px;color:#5a3800;background:#f0c060;border-radius:5px;padding:0 5px;margin-left:6px;font-weight:500">debita</span>';
+      // Botão de baixa: SÓ admin, SÓ se ainda provisionado. (Segurança real é no banco: nd_baixa checa papel.)
+      if(atual.status==='provisionado' && S.papel==='admin' && atual.id!=null){
+        baixaBtn='<div style="margin-top:6px"><button onclick="darBaixa('+atual.id+')" style="font-size:11px;padding:4px 10px;border-radius:6px;border:1px solid #a9d56c;background:transparent;color:#a9d56c;cursor:pointer">✓ Dar baixa (marcar pago)</button></div>';
+      }
     } else {
       val='+'+brl(perDra)+'/Dra';
       sub='a partir de '+String(primeira.venc||'').slice(0,5)+' · não pesa '+mesRefCurto(mesAtual);
@@ -777,7 +784,7 @@ function renderProjecao(){
     }
     rows+='<div style="display:flex;justify-content:space-between;gap:10px;padding:8px 0;border-bottom:1px solid rgba(255,255,255,.06)">'
       +'<div style="min-width:0"><div style="font-size:13px;color:rgba(255,255,255,.85)">'+f.nome+tag+'</div>'
-      +'<div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:2px">'+sub+'</div></div>'
+      +'<div style="font-size:11px;color:rgba(255,255,255,.45);margin-top:2px">'+sub+'</div>'+baixaBtn+'</div>'
       +'<div style="font-size:13px;color:rgba(255,255,255,.8);white-space:nowrap;flex-shrink:0">'+val+'</div></div>';
   }
   var sintese='<div style="display:flex;justify-content:space-between;gap:10px;padding-top:10px;margin-top:4px;border-top:2px solid rgba(255,255,255,.15)">'
@@ -959,6 +966,22 @@ async function salvarCaixa(){
     console.error('Erro salvar caixa:',e);
     showToast('Erro: '+e.message,true);
     if(btn){ btn.disabled=false; btn.textContent='Salvar'; }
+  }
+}
+
+// Baixa de compromisso provisionado (status -> 'pago'). SÓ admin. A segurança REAL está no banco
+// (função nd_baixa checa papel); o botão escondido é só conveniência. Não altera valores nem agregados.
+async function darBaixa(id){
+  if(!confirm('Dar baixa nesta parcela?\n\nO status vai de "provisão" para "pago". Não altera valores nem o disponível — só marca que o dinheiro saiu de fato.')) return;
+  try{
+    var res=await sb.rpc('nd_baixa',{p_id:id});
+    if(res.error) throw new Error(res.error.message);
+    for(var i=0;i<S.LANC.length;i++){ if(S.LANC[i].id===id){ S.LANC[i].status='pago'; break; } }
+    showToast('Baixa registrada — parcela marcada como paga.');
+    render();
+  }catch(e){
+    console.error('Erro baixa:',e);
+    showToast('Erro na baixa: '+(e.message||e),true);
   }
 }
 
