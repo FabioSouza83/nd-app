@@ -546,79 +546,48 @@ function compMes(t){
   return String(t.created_at||'').slice(0,7);
 }
 function calcDisp(){
-  // Mês de referência atual ('YYYY-MM'): compras/parcelas com vencimento FUTURO não entram no disponível agora
   var mesAtual = (S.MAIO && S.MAIO.mes_ref) ? String(S.MAIO.mes_ref).slice(0,7) : '';
-  var rn=0,rd=0,dn=0,dd=0;   // lançamentos MANUAIS: receitas (rn/rd) e compras do mês (dn/dd)
-  var en=0,ed=0;             // despesa OPERACIONAL de extrato do mês (natureza='operacao')
-  var impn=0,impd=0;         // imposto PAGO de extrato no mês (natureza='imposto', competência anterior)
-  var despItens=[];          // itens nomeados que compõem en/ed (desfragmentar o lump na tela): {desc,n,d}
+  var rn=0,rd=0, en=0,ed=0, impn=0,impd=0;
+  var despItens=[], cgItens=[], impItens=[];   // operacao (soma nas Dras) · capital_giro=ND (não soma) · imposto (consome reserva)
   for(var i=0;i<S.LANC.length;i++){
     var t=S.LANC[i];
-    // Classificação pela NATUREZA (fim do ehImpostoOuContab por cat/texto — Bloco 3):
-    //  - capital_giro (envelope/aporte) e exibicao (linhas-espelho): NUNCA entram no disponível;
-    //  - contabilidade: entra à parte via contabMeta (50/50), não aqui.
-    if(t.natureza==='capital_giro'||t.natureza==='exibicao'||t.natureza==='contabilidade') continue;
-    if(t.origem==='extrato'){
-      // Receita de extrato continua representada por M.rec_n / M.rec_d (agregado derivado da trilha).
-      if(t.tipo!=='despesa') continue;
-      if(compMes(t)!==mesAtual) continue;   // só o mês corrente (por COMPETÊNCIA, não created_at)
-      if(t.natureza==='imposto'){
-        // MUNDO A: imposto pago NÃO desconta do disponível — consome a reserva (bloco PROVISIONADO).
-        // impn/impd acumulam só como INFORMAÇÃO (rastro do consumo), fora da conta do disponível.
-        if(t.flag==='conjunta'){var ri=rateio(t.valor);impn+=ri.n;impd+=ri.d;}
-        else if(t.flag==='neia') impn+=Number(t.valor);
-        else impd+=Number(t.valor);
-      } else {
-        // Despesa operacional: acumula E guarda o item nomeado (pra desfragmentar o lump na tela).
-        var xn=0,xd=0;
-        if(t.flag==='conjunta'){var re=rateio(t.valor);xn=re.n;xd=re.d;}
-        else if(t.flag==='neia') xn=Number(t.valor);
-        else xd=Number(t.valor);
-        en+=xn;ed+=xd;
-        despItens.push({desc:(t.descricao||'Despesa'), n:xn, d:xd, status:(t.status||'pago')});
-      }
+    if(t.natureza==='exibicao') continue;        // espelho/parcelas futuras: fora de tudo
+    if(t.natureza==='contabilidade') continue;    // entra via contabMeta (50/50), não como item
+    if(t.tipo==='receita'){
+      // receita de extrato já está em M.rec_n/rec_d (agregado); só manual soma aqui. capital_giro/aporte não é receita das Dras.
+      if(t.origem!=='extrato' && t.natureza!=='capital_giro'){ if(t.flag==='neia') rn+=Number(t.valor); else rd+=Number(t.valor); }
       continue;
     }
-    if(t.tipo==='receita'){
-      if(t.flag==='neia') rn+=Number(t.valor);
-      else rd+=Number(t.valor);
+    // despesa: só a do mês corrente, por COMPETÊNCIA (venc/data), não created_at (Regra 13)
+    if(compMes(t)!==mesAtual) continue;
+    if(t.natureza==='capital_giro'){ cgItens.push({desc:(t.descricao||'Despesa'), valor:Number(t.valor), flag:t.flag, status:(t.status||'pago')}); continue; }
+    // rateio conjunto (centavo ímpar→Néia) ou individual
+    var xn,xd;
+    if(t.flag==='conjunta'){ var r=rateio(t.valor); xn=r.n; xd=r.d; }
+    else if(t.flag==='neia'){ xn=Number(t.valor); xd=0; }
+    else { xn=0; xd=Number(t.valor); }
+    if(t.natureza==='imposto'){
+      // MUNDO A: imposto pago NÃO desconta o disponível — consome a reserva. impn/impd só informação.
+      impn+=xn; impd+=xd;
+      impItens.push({id:t.id, desc:(t.descricao||'Imposto'), n:xn, d:xd, flag:t.flag, status:(t.status||'pago'), pago_em:t.pago_em});
     } else {
-      // Despesa MANUAL (parcela). Régua 13: natureza='operacao' (pago OU provisionado) DEBITA,
-      // independente de origem — a parcela do mês vem como 'operacao', as futuras como 'exibicao'
-      // (já saíram no topo). Competência = venc (só o mês corrente debita; não conta em outro mês).
-      var vmes = compMes(t);
-      if(mesAtual && vmes && vmes!==mesAtual) continue;
-      if(t.natureza==='imposto'){
-        if(t.flag==='conjunta'){var rmi=rateio(t.valor);impn+=rmi.n;impd+=rmi.d;}
-        else if(t.flag==='neia') impn+=Number(t.valor);
-        else impd+=Number(t.valor);
-      } else {
-        var mxn=0,mxd=0;
-        if(t.flag==='conjunta'){var rm=rateio(t.valor);mxn=rm.n;mxd=rm.d;}
-        else if(t.flag==='neia') mxn=Number(t.valor);
-        else mxd=Number(t.valor);
-        en+=mxn;ed+=mxd;
-        despItens.push({desc:(t.descricao||'Despesa'), n:mxn, d:mxd, status:(t.status||'pago')});
-      }
+      // operacao (pago OU provisionado): DEBITA. Régua 13.
+      en+=xn; ed+=xd;
+      despItens.push({id:t.id, desc:(t.descricao||'Despesa'), n:xn, d:xd, flag:t.flag, natureza:t.natureza, status:(t.status||'pago'), pago_em:t.pago_em});
     }
   }
   var M=S.MAIO;
-  // Custos fixos da empresa rateados 50/50 entre as dras (hoje: contabilidade; futuro: água/luz/internet)
   var contabMeta = (M.contabilidade!=null) ? Number(M.contabilidade)/2 : 0;
-  // A contabilidade do mês já debitou na conta? (lançamento natureza=contabilidade, status pago).
-  // Se sim → ocorrido (verde); se não → ainda é reserva (laranja). A provisão de impostos é sempre reserva.
   var contabPago=false;
-  for(var ci=0;ci<S.LANC.length;ci++){var ct=S.LANC[ci];
-    if(String(ct.created_at||'').slice(0,7)===mesAtual && ct.natureza==='contabilidade' && (ct.status||'pago')==='pago'){contabPago=true;break;}
+  for(var ci=0;ci<S.LANC.length;ci++){ var ct=S.LANC[ci];
+    if(compMes(ct)===mesAtual && ct.natureza==='contabilidade' && (ct.status||'pago')==='pago'){ contabPago=true; break; }
   }
-  // MUNDO A (laço do imposto, 05/07): imposto pago NÃO desconta do disponível — ele CONSOME a
-  // reserva (bloco PROVISIONADO), não gera despesa nova. A provisão já saiu no mês de competência;
-  // contar o pagamento de novo cobraria 2×. impn/impd seguem acumulados só como INFORMAÇÃO (rastro do
-  // consumo da reserva), fora da conta do disponível.
   return {
-    neia: Number(M.ant_n)+Number(M.rec_n)+rn-en-dn-Number(M.plab_n)-Number(M.prov_n)-contabMeta,
-    dany: Number(M.ant_d)+Number(M.rec_d)+rd-ed-dd-Number(M.plab_d)-Number(M.prov_d)-contabMeta,
-    rn:rn, rd:rd, dn:dn, dd:dd, en:en, ed:ed, impn:impn, impd:impd, contab:contabMeta, despItens:despItens, contabPago:contabPago
+    neia: Number(M.ant_n)+Number(M.rec_n)+rn-en-Number(M.plab_n)-Number(M.prov_n)-contabMeta,
+    dany: Number(M.ant_d)+Number(M.rec_d)+rd-ed-Number(M.plab_d)-Number(M.prov_d)-contabMeta,
+    rn:rn, rd:rd, en:en, ed:ed, impn:impn, impd:impd, contab:contabMeta, contabPago:contabPago,
+    prov_n:Number(M.prov_n), prov_d:Number(M.prov_d),
+    despItens:despItens, cgItens:cgItens, impItens:impItens
   };
 }
 
@@ -796,11 +765,57 @@ function renderProjecao(){
     +'<span style="font-size:15px;font-weight:700;color:var(--amber);white-space:nowrap">'+brl(soma)+'/Dra</span></div>';
   return '<div class="card"><div class="card-title">Projeção de Compromissos</div>'+rows+sintese+'</div>';
 }
+// Bloco COMPROMISSOS unificado (d = calcDisp()): todo débito/reserva do mês — operacao, provisão de
+// impostos, contabilidade, imposto pago (consome reserva), capital_giro (ND). Etiqueta por flag/natureza.
+// Baixa por item (admin). INVARIANTE: soma per-Dra dos itens (ND/imposto têm n=d=0) = "Despesas e provisões".
+function renderCompromissos(d){
+  var brl=function(v){return 'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});};
+  var etq=function(flag,nd){
+    var t,bg,fg;
+    if(nd){t='ND';bg='#EDE7DA';fg='#5F5E5A';}
+    else if(flag==='conjunta'){t='50/50';bg='#E4EAF2';fg='#2E75B6';}
+    else if(flag==='neia'){t='Néia';bg='#BDD7EE';fg='#204D74';}
+    else if(flag==='dany'){t='Dany';bg='#C6E0B4';fg='#375623';}
+    else {t='—';bg='#eee';fg='#666';}
+    return '<span style="font-size:10px;color:'+fg+';background:'+bg+';border-radius:5px;padding:1px 6px;margin-left:6px;font-weight:500">'+t+'</span>';
+  };
+  var itens=[];
+  (d.despItens||[]).forEach(function(x){ itens.push({desc:x.desc,valor:x.n+x.d,n:x.n,d:x.d,flag:x.flag,nd:false,status:x.status,id:x.id,tipo:'op',pago_em:x.pago_em}); });
+  if((d.prov_n+d.prov_d)>0) itens.push({desc:'Provisão de impostos (6%)',valor:d.prov_n+d.prov_d,n:d.prov_n,d:d.prov_d,flag:'conjunta',nd:false,status:'reserva',tipo:'prov'});
+  if(d.contab>0) itens.push({desc:'Contabilidade',valor:d.contab*2,n:d.contab,d:d.contab,flag:'conjunta',nd:false,status:(d.contabPago?'pago':'reserva'),tipo:'contab'});
+  (d.impItens||[]).forEach(function(x){ itens.push({desc:x.desc,valor:x.n+x.d,n:0,d:0,flag:x.flag,nd:false,status:x.status,id:x.id,tipo:'imp',pago_em:x.pago_em}); });
+  (d.cgItens||[]).forEach(function(x){ itens.push({desc:x.desc,valor:x.valor,n:0,d:0,flag:x.flag,nd:true,status:x.status,tipo:'nd'}); });
+  if(!itens.length) return '';
+  var rows='', somaN=0, somaD=0;
+  for(var i=0;i<itens.length;i++){
+    var it=itens[i]; somaN+=it.n; somaD+=it.d;
+    var acao='';
+    if(it.status==='pago'){
+      var pd=it.pago_em?new Date(String(it.pago_em).replace(' ','T')):null;
+      var pdTxt=(pd&&!isNaN(pd.getTime()))?pd.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}):'';
+      acao='<span style="font-size:11px;font-weight:500;color:var(--green)">✓ Pago'+(pdTxt?' em '+pdTxt:'')+'</span>';
+    } else if((it.tipo==='op'||it.tipo==='imp') && it.status==='provisionado' && S.papel==='admin' && it.id!=null){
+      acao='<button onclick="darBaixa('+it.id+')" style="font-size:11px;padding:4px 10px;border-radius:8px;border:none;background:var(--green);color:#fff;font-weight:500;cursor:pointer">✓ Baixa</button>';
+    }
+    var nota = it.tipo==='imp' ? '<span style="font-size:10px;color:var(--gray);margin-left:6px">consome reserva</span>'
+             : it.tipo==='nd' ? '<span style="font-size:10px;color:var(--gray);margin-left:6px">envelope</span>'
+             : (it.status==='reserva' ? '<span style="font-size:10px;color:var(--gray);margin-left:6px">reserva</span>' : '');
+    rows+='<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;padding:8px 0;border-bottom:1px solid #EFEFEF">'
+      +'<div style="min-width:0"><span style="font-size:13px;color:var(--navy)">'+it.desc+'</span>'+etq(it.flag,it.nd)+nota+(acao?'<div style="margin-top:5px">'+acao+'</div>':'')+'</div>'
+      +'<div style="font-size:13px;font-weight:500;color:var(--navy);white-space:nowrap;flex-shrink:0">'+brl(it.valor)+'</div></div>';
+  }
+  var espN=d.en+d.prov_n+d.contab, espD=d.ed+d.prov_d+d.contab;
+  var ok=Math.abs(somaN-espN)<0.005 && Math.abs(somaD-espD)<0.005;
+  var inv = ok
+    ? '<div style="font-size:11px;color:var(--green);margin-top:10px">✓ Confere: soma Néia '+brl(somaN)+' · Dany '+brl(somaD)+' = "Despesas e provisões" do resumo.</div>'
+    : '<div style="font-size:11px;color:var(--red);font-weight:500;margin-top:10px">⚠️ Divergência bloco × resumo — Néia '+brl(somaN)+' vs '+brl(espN)+' · Dany '+brl(somaD)+' vs '+brl(espD)+'</div>';
+  return '<div class="card"><div class="card-title">Compromissos e provisões do mês</div>'+rows+inv+'</div>';
+}
 function renderDash(){
   var d=calcDisp();
   var M=S.MAIO;
 
-  var sCard=function(name,cls,ant,rec,desp,despItens,compras,impPago,plab,prov,contab,contabPago,disp_val){
+  var sCard=function(name,cls,ant,rec,despEProv,plab,disp_val){
     var neg=disp_val<0;
     var brl=function(v){ return v.toLocaleString('pt-BR',{style:'currency',currency:'BRL'}); };
     var deficit=neg?Math.abs(disp_val):0;
@@ -812,34 +827,13 @@ function renderDash(){
       +'<div class="sc-neg-l2">Para zerar este mês, fature '+brl(meta)+'</div>'
       +'<div class="sc-neg-l3">valor já considera a provisão de 6%</div>'
       +'</div>'):'';
-    // Marcador ÚNICO em toda linha: verde = já debitou na conta (ocorrido); laranja = reserva (provisão).
-    var tagOcor='<span style="font-size:10px;color:#1b4d0a;background:#a9d56c;border-radius:5px;padding:0 5px;margin-left:6px;font-weight:500">ocorrido</span>';
-    var tagProv='<span style="font-size:10px;color:#5a3800;background:#f0c060;border-radius:5px;padding:0 5px;margin-left:6px;font-weight:500">provisão</span>';
-    var comprasLine=compras>0?'<div class="sc-line"><span class="sc-line-l">(–) Compras do mês</span><span class="sc-line-v">('+fmt(compras)+')</span></div>':'';
-    // Despesas operac. desfragmentadas: subtotal + itens nomeados (Pintor, etc.), só os >0 desta Dra.
-    var despBlock='<div class="sc-line"><span class="sc-line-l">(–) Despesas operac.</span><span class="sc-line-v">('+fmt(desp)+')</span></div>';
-    if(despItens && despItens.length){
-      for(var q=0;q<despItens.length;q++){
-        if(despItens[q].val>0){
-          var tag=((despItens[q].status||'pago')==='provisionado')?tagProv:tagOcor;
-          despBlock+='<div class="sc-line" style="padding-left:14px;font-size:12px"><span class="sc-line-l">• '+despItens[q].desc+tag+'</span><span class="sc-line-v">('+fmt(despItens[q].val)+')</span></div>';
-        }
-      }
-    }
-    // Mundo A: informação, NÃO desconta do disponível — o imposto pago consome a reserva (provisão).
-    var impLine=impPago>0?'<div class="sc-line" style="opacity:.75"><span class="sc-line-l">Impostos pagos <span style="font-size:10px;color:var(--gray)">(consome a reserva, não desconta)</span></span><span class="sc-line-v">'+fmt(impPago)+'</span></div>':'';
-    var contabLine=contab>0?'<div class="sc-line"><span class="sc-line-l">(–) Contabilidade (50%)'+(contabPago?tagOcor:tagProv)+'</span><span class="sc-line-v">('+fmt(contab)+')</span></div>':'';
     var plabLine=plab>0?'<div class="sc-line"><span class="sc-line-l">(–) Pró-labore</span><span class="sc-line-v">('+fmt(plab)+')</span></div>':'';
     return '<div class="sc '+cls+(neg?' neg':'')+'">'
       +'<div class="sc-name '+cls+'">'+name+'</div>'
       +'<div class="sc-line"><span class="sc-line-l">Saldo anterior</span><span class="sc-line-v">'+fmt(ant)+'</span></div>'
       +'<div class="sc-line"><span class="sc-line-l">+ Receitas mês</span><span class="sc-line-v">'+fmt(rec)+'</span></div>'
-      +despBlock
-      +comprasLine
+      +'<div class="sc-line"><span class="sc-line-l">(–) Despesas e provisões</span><span class="sc-line-v">('+fmt(despEProv)+')</span></div>'
       +plabLine
-      +'<div class="sc-line"><span class="sc-line-l">(–) Provisão (impostos)'+tagProv+'<br><span style="font-size:10px;color:var(--gray);font-weight:400">reserva — consumida no pagamento</span></span><span class="sc-line-v">('+fmt(prov)+')</span></div>'
-      +impLine
-      +contabLine
       +(neg?'':'<div class="sc-disp"><span class="sc-disp-l"><span class="sc-ok">✓</span> Disponível agora</span><span class="sc-disp-v">'+fmt(disp_val)+'</span></div>')
       +alertTxt+'</div>';
   };
@@ -873,8 +867,6 @@ function renderDash(){
   }
 
   var totalDisp=Math.max(0,d.neia)+Math.max(0,d.dany);
-  var despN=(d.despItens||[]).map(function(x){return {desc:x.desc,val:x.n,status:x.status};});
-  var despD=(d.despItens||[]).map(function(x){return {desc:x.desc,val:x.d,status:x.status};});
   // "Atualizado em" é DERIVADO (fonte, não digitação): lê o created_at do lançamento mais recente
   // e se formata sozinho. Todo lançamento novo atualiza o banner — igual os valores derivam da trilha.
   var maxTs='';
@@ -889,14 +881,14 @@ function renderDash(){
     +'<div class="hero">'
     +'<div class="hero-label">Disponível para retirada — '+fmtMesRef(S.MAIO.mes_ref)+'</div>'
     +'<div class="scards">'
-    +sCard('Néia','neia',Number(M.ant_n),Number(M.rec_n)+d.rn,d.en,despN,d.dn,d.impn,Number(M.plab_n),Number(M.prov_n),d.contab,d.contabPago,d.neia)
-    +sCard('Dany','dany',Number(M.ant_d),Number(M.rec_d)+d.rd,d.ed,despD,d.dd,d.impd,Number(M.plab_d),Number(M.prov_d),d.contab,d.contabPago,d.dany)
+    +sCard('Néia','neia',Number(M.ant_n),Number(M.rec_n)+d.rn, d.en+d.prov_n+d.contab, Number(M.plab_n), d.neia)
+    +sCard('Dany','dany',Number(M.ant_d),Number(M.rec_d)+d.rd, d.ed+d.prov_d+d.contab, Number(M.plab_d), d.dany)
     +'</div>'
     +'<div class="hero-tl">Total disponível</div>'
     +'<div class="hero-tv">'+fmt(totalDisp)+'</div>'
     +'</div>'
     +renderCaixaEmpresa(totalDisp)
-    +renderProjecao()
+    +renderCompromissos(d)
     +'<div class="card"><div class="card-title">Evolução 2026</div>'
     +'<div class="evo-wrap">'+barras+'</div>'
     +'<div style="display:flex;gap:12px;margin-top:10px;justify-content:center">'
