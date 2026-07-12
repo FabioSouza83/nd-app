@@ -848,7 +848,7 @@ function renderCompromissos(d){
       acao='<button onclick="darBaixa('+it.id+')" style="font-size:11px;padding:4px 10px;border-radius:8px;border:none;background:var(--green);color:#fff;font-weight:500;cursor:pointer">✓ Baixa</button>';
     }
     var nota = it.tipo==='imp' ? '<span style="font-size:10px;color:var(--gray);margin-left:6px">consome reserva</span>'
-             : it.tipo==='prov' ? '<span style="font-size:10px;color:var(--gray);margin-left:6px">reserva — retorna no mês seguinte</span>'
+             : it.tipo==='prov' ? '<span style="font-size:10px;color:var(--gray);margin-left:6px">reserva p/ impostos (não volta ao disponível)</span>'
              : it.status==='reserva' ? '<span style="font-size:10px;color:var(--gray);margin-left:6px">reserva</span>'
              : '<span style="font-size:10px;color:#5a3800;background:#f0c060;border-radius:5px;padding:0 5px;margin-left:6px;font-weight:500">a pagar</span>';
     rows+='<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;padding:8px 0;border-bottom:1px solid #EFEFEF">'
