@@ -1004,6 +1004,14 @@ function renderCaixaEmpresa(totalDisp){
   var ok=margem>=0;
   var canEdit=S.user.role==='fabio';
 
+  // Envelope de capital de giro: saldo CUMULATIVO = Σ(receitas) − Σ(despesas) de natureza='capital_giro'
+  // (aporte entra uma vez, compras do envelope saem ao longo do tempo). Linha SÓ informativa: NÃO entra em
+  // nenhuma soma do caixa (caixaLivre/margem intactos). Alerta visual quando < R$ 1.000.
+  var envRec=0, envDesp=0;
+  for(var ei=0;ei<S.LANC.length;ei++){ var et=S.LANC[ei]; if(et.natureza!=='capital_giro') continue;
+    if(et.tipo==='receita') envRec+=Number(et.valor)||0; else envDesp+=Number(et.valor)||0; }
+  var envelope=envRec-envDesp, envLow=envelope<1000;
+
   if(S.caixaEdit && canEdit){
     return '<div class="card cx-card">'
       +'<div class="card-title">Caixa da empresa · ajustar obrigações</div>'
@@ -1032,6 +1040,8 @@ function renderCaixaEmpresa(totalDisp){
     +ln('(–) Retiradas das sócias', -totalDisp, 'cx-neg')
     +'<div class="cx-row cx-margem '+(ok?'ok':'bad')+'"><span class="cx-l">Margem após retiradas</span><span class="cx-v">'+(margem<0?'('+fmt(Math.abs(margem))+')':fmt(margem))+'</span></div>'
     +'<div class="cx-verdict '+(ok?'ok':'bad')+'">'+(ok?'✅ Caixa suficiente para todas as retiradas, com margem positiva.':'⚠️ Atenção: as retiradas previstas passam do caixa livre. Reveja antes de retirar.')+'</div>'
+    +'<div class="cx-row cx-envelope" style="margin-top:10px;border-top:1px dashed rgba(0,0,0,.14);padding-top:10px"><span class="cx-l">📦 Envelope capital de giro'+(envLow?'<span class="cx-note" style="color:var(--red)">abaixo de R$ 1.000</span>':'<span class="cx-note">fundo à parte — não entra no caixa acima</span>')+'</span><span class="cx-v'+(envLow?' cx-neg':'')+'">'+fmt(envelope)+'</span></div>'
+    +(envLow?'<div class="cx-verdict bad" style="margin-top:6px">⚠️ Envelope de capital de giro abaixo de R$ 1.000 — reponha antes de novas compras do envelope.</div>':'')
     +'</div>';
 }
 
