@@ -892,7 +892,12 @@ function renderCompromissos(d){
     ? '<div style="margin-top:12px;font-size:12px;color:var(--navy);background:#eef1f7;border-radius:8px;padding:9px">🧾 Reserva de impostos acumulada (meses anteriores): '+brl(riN)+'/Néia · '+brl(riD)+'/Dany<div style="font-size:11px;color:var(--gray);margin-top:2px">retida para DAS/INSS — fora do disponível; baixa quando o imposto é pago.</div></div>'
     : '';
 
-  return '<div class="card"><div class="card-title">Compromissos do mês</div>'+corpo+rodape+alerta+reservaAcum+blocoFut+'</div>';
+  // Subtítulo fixo: responde de uma vez a dúvida "isso ainda vai subtrair?" — vale pro card todo,
+  // em vez de repetir por item. Só quando há pendentes (sobre o estado "quitado" não faz sentido).
+  var subtitulo = pend.length
+    ? '<div style="font-size:11px;color:var(--gray);margin:-2px 0 10px">Valores já descontados do disponível — a baixa apenas confirma o pagamento.</div>'
+    : '';
+  return '<div class="card"><div class="card-title">Compromissos do mês</div>'+subtitulo+corpo+rodape+alerta+reservaAcum+blocoFut+'</div>';
 }
 // Teste do invariante de composição (Opção A) — chamável no console: __testInvariante().
 // Confirma que Σ(universo do mês: operacao pago+prov + provisão + contab/2) por Dra == linha azul do resumo.
@@ -1162,7 +1167,7 @@ async function darBaixa(id){
   if(!t){ showToast('Lançamento não encontrado.',true); return; }
   var venc = t.venc ? String(t.venc).slice(0,5) : (t.data||'');
   var valor = 'R$ '+Number(t.valor).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});
-  if(!confirm('Dar baixa: '+(t.descricao||'lançamento')+' — '+valor+', venc '+venc+'?\n\nMarca como PAGO. Não altera valores nem o disponível.')) return;
+  if(!confirm('Dar baixa: '+(t.descricao||'lançamento')+' — '+valor+', venc '+venc+'?\n\nO valor já estava reservado; confirmar apenas registra o pagamento.')) return;
   try{
     var res=await sb.rpc('nd_baixa',{p_id:id});
     if(res.error) throw new Error(res.error.message);
