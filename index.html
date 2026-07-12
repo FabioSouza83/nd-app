@@ -688,6 +688,7 @@ function renderApp(){
   }
   else if(S.tab==='lancamento')content=renderForm();
   else if(S.tab==='auditoria')content=renderAudit();
+  else if(S.tab==='fecharmes')content=renderFecharMes();
 
   var tabsHtml='';
   for(var i=0;i<tabs.length;i++){
@@ -977,6 +978,7 @@ function renderDash(){
     +'</div>'
     +renderCaixaEmpresa(totalDisp)
     +renderCompromissos(d)
+    +(S.papel==='admin' ? '<div style="text-align:center;margin:10px 0 2px"><button class="btn btn-sec btn-sm" onclick="abrirFecharMes()">🔒 Fechar o mês (admin)</button></div>' : '')
     +'<div class="card"><div class="card-title">Evolução 2026</div>'
     +'<div class="evo-wrap">'+barras+'</div>'
     +'<div style="display:flex;gap:12px;margin-top:10px;justify-content:center">'
@@ -1068,6 +1070,76 @@ async function salvarCaixa(){
 function scrollToLanc(){
   var el=document.getElementById('ult-lanc'), sc=document.querySelector('.content');
   if(el&&sc) sc.scrollTop = el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 8;
+}
+// ── FECHAR MÊS (item 2) — abre a conferência (dry-run read-only), confirma (execução atômica no banco).
+// A função nd_fechar_mes(p_execute) é a fonte-verdade: reconcilia trilha × agregado e BLOQUEIA se divergir;
+// o front só exibe. Segurança REAL no banco (SECURITY DEFINER + nd_papel_atual()='admin').
+async function abrirFecharMes(){
+  S.tab='fecharmes'; S.fmBusy=true; S.fmData=null; S.fmErr=null; render();
+  try{
+    var res=await sb.rpc('nd_fechar_mes',{p_execute:false});
+    if(res.error) throw new Error(res.error.message);
+    S.fmData=res.data;
+  }catch(e){ S.fmErr=(e&&e.message)||String(e); }
+  S.fmBusy=false; render();
+}
+async function confirmarFecharMes(){
+  if(!confirm('Fechar o mês definitivamente?\n\nGrava o histórico, define o saldo anterior do próximo mês (= resultado deste) e ativa as parcelas do mês que vem. Ação irreversível.')) return;
+  S.fmBusy=true; render();
+  try{
+    var res=await sb.rpc('nd_fechar_mes',{p_execute:true});
+    if(res.error) throw new Error(res.error.message);
+    await carregarDados();
+    S.fmBusy=false; S.fmData=null; S.fmErr=null; S.tab='dashboard';
+    var d=res.data||{};
+    showToast('Mês fechado — '+(d.nome||'')+' arquivado'+(d.parcelas_ativadas!=null?' · '+d.parcelas_ativadas+' parcela(s) ativada(s)':'')+'.');
+    render();
+  }catch(e){ S.fmBusy=false; S.fmErr=(e&&e.message)||String(e); render(); }
+}
+function fmDiff(rc,brl){
+  var linha=function(lbl,o){
+    if(!o) return '';
+    var has=(o.trilha_n!==undefined && o.trilha_n!==null);
+    var dir=(o.ok===false)?'⛔ diverge':'';
+    var val=has ? ('trilha '+brl(o.trilha_n)+' / '+brl(o.trilha_d)+' · agregado '+brl(o.agregado_n)+' / '+brl(o.agregado_d))
+                : ('agregado '+brl(o.agregado_n)+' / '+brl(o.agregado_d));
+    return '<div style="display:flex;justify-content:space-between;gap:8px;font-size:11px;padding:4px 0;border-top:1px solid #f0d0d0"><span style="color:var(--navy);font-weight:500">'+lbl+' <span style="color:var(--red)">'+dir+'</span></span><span style="color:var(--gray);text-align:right">'+val+'</span></div>';
+  };
+  return '<div style="margin-top:8px">'+linha('Despesa',rc.desp)+linha('Receita',rc.rec)+linha('Pró-labore',rc.plab)+linha('Provisão',rc.prov)+'</div>';
+}
+function renderFecharMes(){
+  var back='<div style="text-align:center;margin-top:16px"><button class="btn btn-sec btn-sm" onclick="S.tab=\'dashboard\';S.fmData=null;S.fmErr=null;render()">← Voltar ao painel</button></div>';
+  if(S.fmBusy) return '<p class="stt">Fechar o mês</p><div class="card"><div style="text-align:center;padding:18px;color:var(--gray)">Processando…</div></div>';
+  if(S.fmErr) return '<p class="stt">Fechar o mês</p><div class="card"><div style="color:var(--red);font-weight:600;font-size:13px;white-space:pre-wrap">⚠️ '+S.fmErr+'</div></div>'+back;
+  var D=S.fmData;
+  if(!D) return '<p class="stt">Fechar o mês</p><div class="card">Sem dados de conferência.</div>'+back;
+  var brl=function(v){return 'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});};
+  var okc=D.ok===true;
+  var statusBox = okc
+    ? '<div style="background:#eaf7ea;border:1px solid #b6e0b6;border-radius:10px;padding:12px;margin-bottom:12px"><div style="font-weight:700;color:var(--green)">✅ Livros conferem (trilha × agregado)</div><div style="font-size:12px;color:var(--gray);margin-top:3px">Despesa e receita batem no centavo — fechamento liberado.</div></div>'
+    : '<div style="background:#fdeaea;border:1px solid #f0b6b6;border-radius:10px;padding:12px;margin-bottom:12px"><div style="font-weight:700;color:var(--red)">⛔ Livros divergem — fechamento bloqueado</div><div style="font-size:12px;color:var(--gray);margin-top:3px">Resolva a diferença abaixo antes de fechar. Nunca fechamos escolhendo um lado em silêncio.</div>'+fmDiff(D.reconc||{},brl)+'</div>';
+  var d=calcDisp();
+  var pend=(d.despItens||[]).filter(function(x){return x.status==='provisionado';}).length
+          +(d.impItens||[]).filter(function(x){return x.status==='provisionado';}).length
+          +(((d.prov_n+d.prov_d)>0)?1:0)+(((d.contab>0)&&!d.contabPago)?1:0);
+  var pendBox = pend>0
+    ? '<div style="font-size:12px;color:#5a3800;background:#fff6e0;border-radius:8px;padding:10px;margin-top:10px">⚠️ Ainda há '+pend+' compromisso(s) pendente(s) neste mês — o ideal é a tela Compromissos estar vazia antes de fechar.</div>'
+    : '<div style="font-size:12px;color:var(--green);margin-top:10px">✓ Compromissos do mês quitados.</div>';
+  var confirmBtn = okc
+    ? '<button class="btn" style="width:100%;margin-top:14px" onclick="confirmarFecharMes()">🔒 Fechar '+D.nome+' definitivamente</button>'
+    : '<button class="btn" style="width:100%;margin-top:14px;opacity:.5;cursor:not-allowed" disabled>Fechamento bloqueado</button>';
+  return '<p class="stt">Fechar o mês</p>'
+    +'<div class="card"><div class="card-title">Conferência — fechar '+D.nome+'</div>'
+    + statusBox
+    + '<div style="font-size:13px;color:var(--navy)">Resultado do mês — vira o <b>saldo anterior</b> de '+mesRefCurto(D.proximo)+':</div>'
+    + '<div style="display:flex;gap:10px;margin:8px 0">'
+      +'<div style="flex:1;background:#f4f7fb;border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--gray)">Néia</div><div style="font-weight:700;color:var(--navy)">'+brl(D.res.neia)+'</div></div>'
+      +'<div style="flex:1;background:#f4f7fb;border-radius:8px;padding:10px"><div style="font-size:11px;color:var(--gray)">Dany</div><div style="font-weight:700;color:var(--navy)">'+brl(D.res.dany)+'</div></div>'
+    +'</div>'
+    + '<div style="font-size:12px;color:var(--gray)">'+(D.flip_prox||0)+' parcela(s) de '+mesRefCurto(D.proximo)+' serão ativadas (viram despesa do mês).</div>'
+    + pendBox
+    + confirmBtn
+    + '</div>' + back;
 }
 // Baixa de compromisso provisionado (status -> 'pago'). SÓ admin. A segurança REAL está no banco
 // (função nd_baixa checa papel); o botão escondido é só conveniência. Não altera valores nem agregados.
