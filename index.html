@@ -707,6 +707,45 @@ function renderApp(){
 
 var MES_CURTO=['jan','fev','mar','abr','mai','jun','jul','ago','set','out','nov','dez'];
 function mesRefCurto(ym){var p=String(ym||'').split('-');if(p.length!==2)return ym;var mi=parseInt(p[1],10)-1;if(mi<0||mi>11)return ym;return MES_CURTO[mi]+'/'+p[0].slice(2);}
+// Peso futuro: parcelas de competência FUTURA (padrão "(parc NN/MM)" na descrição, natureza exibicao/espelho),
+// agrupadas por família. NÃO subtraem o disponível (exibicao fora do calcDisp) — sinaliza o que vem.
+// Retorna {rows, somaN, somaD, inicio} p/ o sub-bloco "Próximos meses" da tela Compromissos. Fonte: trilha.
+function pesoFuturoRows(mesAtual, brl, etq){
+  var fam={};
+  for(var i=0;i<S.LANC.length;i++){
+    var t=S.LANC[i];
+    if(t.tipo!=='despesa') continue;
+    var mm=/^(.*?)\s*\(parc\s*(\d+)\/(\d+)\)/i.exec(String(t.descricao||''));
+    if(!mm) continue;
+    var cmp=compMes(t);
+    if(!(cmp>mesAtual)) continue;                       // só o que ainda NÃO chegou (competência futura)
+    var key=mm[1].trim();
+    if(!fam[key]) fam[key]={nome:key, flag:t.flag, valor:Number(t.valor), total:parseInt(mm[3],10), prim:cmp, restam:0};
+    fam[key].restam++;
+    if(cmp<fam[key].prim) fam[key].prim=cmp;
+  }
+  var keys=Object.keys(fam);
+  if(!keys.length) return {rows:'', somaN:0, somaD:0, inicio:''};
+  keys.sort(function(a,b){return fam[a].prim<fam[b].prim?-1:1;});
+  var rows='', somaN=0, somaD=0, inicio='';
+  for(var k=0;k<keys.length;k++){
+    var f=fam[keys[k]];
+    var pn,pd;
+    if(f.flag==='conjunta'){ var r=rateio(f.valor); pn=r.n; pd=r.d; }
+    else if(f.flag==='neia'){ pn=f.valor; pd=0; } else { pn=0; pd=f.valor; }
+    somaN+=pn; somaD+=pd;
+    if(!inicio||f.prim<inicio) inicio=f.prim;
+    var perDra=(f.flag==='conjunta')?('+'+brl(pn)+'/Dra'):('+'+brl(pn+pd)+' '+(f.flag==='neia'?'Néia':'Dany'));
+    rows+='<div style="display:flex;justify-content:space-between;gap:10px;padding:7px 0;border-bottom:1px solid #F1F1F1">'
+      +'<div style="min-width:0"><div style="font-size:12px;color:var(--navy)">'+f.nome+etq(f.flag,false)
+      +'<span style="font-size:10px;color:#22303f;background:#c9d3e2;border-radius:5px;padding:0 5px;margin-left:6px;font-weight:500">futuro</span></div>'
+      +'<div style="font-size:11px;color:var(--gray);margin-top:2px">a partir de '+mesRefCurto(f.prim)+' · '+f.restam+' parcela'+(f.restam>1?'s':'')+' à frente</div></div>'
+      +'<div style="font-size:12px;font-weight:500;color:var(--gray);white-space:nowrap;flex-shrink:0">'+perDra+'</div></div>';
+  }
+  return {rows:rows, somaN:somaN, somaD:somaD, inicio:inicio};
+}
+
+// [MORTO desde abaf7f8 — substituído por pesoFuturoRows + renderCompromissos; mantido só como referência histórica]
 // Bloco "Projeção de Compromissos": lê as parcelas (padrão "(parc NN/MM)" na descrição) de nd_lancamentos,
 // agrupa por família, mostra a parcela do mês (que já debita) e o peso futuro. Fonte: trilha, não digitação.
 function renderProjecao(){
@@ -765,9 +804,11 @@ function renderProjecao(){
     +'<span style="font-size:15px;font-weight:700;color:var(--amber);white-space:nowrap">'+brl(soma)+'/Dra</span></div>';
   return '<div class="card"><div class="card-title">Projeção de Compromissos</div>'+rows+sintese+'</div>';
 }
-// Bloco COMPROMISSOS unificado (d = calcDisp()): todo débito/reserva do mês — operacao, provisão de
-// impostos, contabilidade, imposto pago (consome reserva), capital_giro (ND). Etiqueta por flag/natureza.
-// Baixa por item (admin). INVARIANTE: soma per-Dra dos itens (ND/imposto têm n=d=0) = "Despesas e provisões".
+// Bloco COMPROMISSOS = SÓ O PENDENTE do mês (adendo travado): provisionado a pagar + reserva de impostos
+// não consumida + contabilidade a reservar. PAGO NÃO APARECE (vira só contador de rodapé). capital_giro/envelope
+// FORA da tela. Abaixo, "Próximos meses" = peso futuro (exibicao; não pesa agora; fora do invariante).
+// INVARIANTE (teste de composição, Opção A): Σ(universo do mês = pago+pendente que subtrai) por Dra
+//   == linha azul "Despesas e provisões". É teste sobre o MODELO, não sobre as linhas visíveis. Divergência = bug.
 function renderCompromissos(d){
   var brl=function(v){return 'R$ '+Number(v).toLocaleString('pt-BR',{minimumFractionDigits:2,maximumFractionDigits:2});};
   var etq=function(flag,nd){
@@ -779,37 +820,84 @@ function renderCompromissos(d){
     else {t='—';bg='#eee';fg='#666';}
     return '<span style="font-size:10px;color:'+fg+';background:'+bg+';border-radius:5px;padding:1px 6px;margin-left:6px;font-weight:500">'+t+'</span>';
   };
-  var itens=[];
-  (d.despItens||[]).forEach(function(x){ itens.push({desc:x.desc,valor:x.n+x.d,n:x.n,d:x.d,flag:x.flag,nd:false,status:x.status,id:x.id,tipo:'op',pago_em:x.pago_em}); });
-  if((d.prov_n+d.prov_d)>0) itens.push({desc:'Provisão de impostos (6%)',valor:d.prov_n+d.prov_d,n:d.prov_n,d:d.prov_d,flag:'conjunta',nd:false,status:'reserva',tipo:'prov'});
-  if(d.contab>0) itens.push({desc:'Contabilidade',valor:d.contab*2,n:d.contab,d:d.contab,flag:'conjunta',nd:false,status:(d.contabPago?'pago':'reserva'),tipo:'contab'});
-  (d.impItens||[]).forEach(function(x){ itens.push({desc:x.desc,valor:x.n+x.d,n:0,d:0,flag:x.flag,nd:false,status:x.status,id:x.id,tipo:'imp',pago_em:x.pago_em}); });
-  (d.cgItens||[]).forEach(function(x){ itens.push({desc:x.desc,valor:x.valor,n:0,d:0,flag:x.flag,nd:true,status:x.status,tipo:'nd'}); });
-  if(!itens.length) return '';
-  var rows='', somaN=0, somaD=0;
-  for(var i=0;i<itens.length;i++){
-    var it=itens[i]; somaN+=it.n; somaD+=it.d;
+  // Universo do mês que PESA no disponível (subtrai no calcDisp): operacao (pago+prov) + provisão + contab.
+  // imposto entra como linha informativa (n=d=0, "consome reserva"); capital_giro NÃO entra (envelope, fora da tela).
+  var universo=[];
+  (d.despItens||[]).forEach(function(x){ universo.push({desc:x.desc,valor:x.n+x.d,n:x.n,d:x.d,flag:x.flag,nd:false,status:x.status,id:x.id,tipo:'op',pago_em:x.pago_em}); });
+  (d.impItens||[]).forEach(function(x){ universo.push({desc:x.desc,valor:x.n+x.d,n:0,d:0,flag:x.flag,nd:false,status:x.status,id:x.id,tipo:'imp',pago_em:x.pago_em}); });
+  if((d.prov_n+d.prov_d)>0) universo.push({desc:'Provisão de impostos (6%)',valor:d.prov_n+d.prov_d,n:d.prov_n,d:d.prov_d,flag:'conjunta',nd:false,status:'reserva',tipo:'prov'});
+  if(d.contab>0) universo.push({desc:'Contabilidade',valor:d.contab*2,n:d.contab,d:d.contab,flag:'conjunta',nd:false,status:(d.contabPago?'pago':'reserva'),tipo:'contab'});
+
+  // INVARIANTE de composição (Opção A): a soma do universo (pago+pendente) reconstrói a linha azul.
+  // Guarda contra dinheiro sumir na partição pendente/pago — NÃO é a soma das linhas visíveis. Ver __testInvariante().
+  var invN=0, invD=0;
+  universo.forEach(function(it){ invN+=it.n; invD+=it.d; });
+  var espN=d.en+d.prov_n+d.contab, espD=d.ed+d.prov_d+d.contab;
+  var okInv=Math.abs(invN-espN)<0.005 && Math.abs(invD-espD)<0.005;
+  if(!okInv && typeof console!=='undefined') console.error('[INVARIANTE Compromissos] divergência — Néia '+invN.toFixed(2)+' vs '+espN.toFixed(2)+' · Dany '+invD.toFixed(2)+' vs '+espD.toFixed(2));
+
+  // Partição: pendente (mostra) × pago (só conta no rodapé; realizado mora em Últimos Lançamentos/Histórico).
+  var pend=universo.filter(function(it){return it.status!=='pago';});
+  var nPagos=universo.filter(function(it){return it.status==='pago';}).length;
+
+  var rows='';
+  for(var i=0;i<pend.length;i++){
+    var it=pend[i];
     var acao='';
-    if(it.status==='pago'){
-      var pd=it.pago_em?new Date(String(it.pago_em).replace(' ','T')):null;
-      var pdTxt=(pd&&!isNaN(pd.getTime()))?pd.toLocaleDateString('pt-BR',{day:'2-digit',month:'2-digit'}):'';
-      acao='<span style="font-size:11px;font-weight:500;color:var(--green)">✓ Pago'+(pdTxt?' em '+pdTxt:'')+'</span>';
-    } else if((it.tipo==='op'||it.tipo==='imp') && it.status==='provisionado' && S.papel==='admin' && it.id!=null){
+    if((it.tipo==='op'||it.tipo==='imp') && it.status==='provisionado' && S.papel==='admin' && it.id!=null){
       acao='<button onclick="darBaixa('+it.id+')" style="font-size:11px;padding:4px 10px;border-radius:8px;border:none;background:var(--green);color:#fff;font-weight:500;cursor:pointer">✓ Baixa</button>';
     }
     var nota = it.tipo==='imp' ? '<span style="font-size:10px;color:var(--gray);margin-left:6px">consome reserva</span>'
-             : it.tipo==='nd' ? '<span style="font-size:10px;color:var(--gray);margin-left:6px">envelope</span>'
-             : (it.status==='reserva' ? '<span style="font-size:10px;color:var(--gray);margin-left:6px">reserva</span>' : '');
+             : it.tipo==='prov' ? '<span style="font-size:10px;color:var(--gray);margin-left:6px">reserva — retorna no mês seguinte</span>'
+             : it.status==='reserva' ? '<span style="font-size:10px;color:var(--gray);margin-left:6px">reserva</span>'
+             : '<span style="font-size:10px;color:#5a3800;background:#f0c060;border-radius:5px;padding:0 5px;margin-left:6px;font-weight:500">a pagar</span>';
     rows+='<div style="display:flex;justify-content:space-between;gap:10px;align-items:baseline;padding:8px 0;border-bottom:1px solid #EFEFEF">'
       +'<div style="min-width:0"><span style="font-size:13px;color:var(--navy)">'+it.desc+'</span>'+etq(it.flag,it.nd)+nota+(acao?'<div style="margin-top:5px">'+acao+'</div>':'')+'</div>'
       +'<div style="font-size:13px;font-weight:500;color:var(--navy);white-space:nowrap;flex-shrink:0">'+brl(it.valor)+'</div></div>';
   }
+
+  // Estado vazio = todos os compromissos do mês quitados (pré-condição visual do Fechar Mês).
+  var corpo = pend.length ? rows
+    : '<div style="text-align:center;padding:16px 8px"><div style="font-size:30px">✅</div>'
+      +'<div style="font-size:13px;font-weight:600;color:var(--green);margin-top:4px">Todos os compromissos do mês quitados</div>'
+      +'<div style="font-size:11px;color:var(--gray);margin-top:2px">pré-condição para Fechar o Mês</div></div>';
+
+  // Rodapé: contador de pagos (sem lista, sem valor) + link p/ os lançamentos.
+  var rodape = nPagos
+    ? '<div style="margin-top:12px;font-size:11px;color:var(--gray)">'+nPagos+' pago'+(nPagos>1?'s':'')+' este mês — '
+      +'<a href="#" onclick="scrollToLanc();return false;" style="color:var(--navy);text-decoration:underline">ver lançamentos</a></div>'
+    : '';
+
+  // Banner só se o invariante DIVERGIR (bug de bucketing) — não há ⚠️ preso às linhas visíveis (Opção A).
+  var alerta = okInv ? '' :
+    '<div style="font-size:11px;color:var(--red);font-weight:600;margin-top:10px">⚠️ Invariante rompido — composição do mês ('
+    +brl(invN)+' / '+brl(invD)+') ≠ "Despesas e provisões" ('+brl(espN)+' / '+brl(espD)+'). Bug: conferir bucketing.</div>';
+
+  // Peso futuro (exibicao de competência futura) — informativo, fora do invariante e do disponível.
+  var mesAtual=(S.MAIO&&S.MAIO.mes_ref)?String(S.MAIO.mes_ref).slice(0,7):'';
+  var fut=pesoFuturoRows(mesAtual, brl, etq);
+  var blocoFut = fut.rows
+    ? '<div style="margin-top:16px"><div style="font-size:11px;font-weight:600;color:var(--gray);text-transform:uppercase;letter-spacing:.5px;margin-bottom:2px">Próximos meses · não pesa '+mesRefCurto(mesAtual)+'</div>'
+      +fut.rows
+      +'<div style="display:flex;justify-content:space-between;gap:10px;padding-top:8px;margin-top:2px;border-top:2px solid rgba(27,42,74,.10)">'
+      +'<span style="font-size:12px;color:var(--navy)">Peso recorrente a partir de '+mesRefCurto(fut.inicio)+'</span>'
+      +'<span style="font-size:13px;font-weight:700;color:var(--amber);white-space:nowrap">'+brl(fut.somaN)+'/Néia · '+brl(fut.somaD)+'/Dany</span></div></div>'
+    : '';
+
+  return '<div class="card"><div class="card-title">Compromissos do mês</div>'+corpo+rodape+alerta+blocoFut+'</div>';
+}
+// Teste do invariante de composição (Opção A) — chamável no console: __testInvariante().
+// Confirma que Σ(universo do mês: operacao pago+prov + provisão + contab/2) por Dra == linha azul do resumo.
+function __testInvariante(){
+  var d=calcDisp();
+  var invN=0,invD=0;
+  (d.despItens||[]).forEach(function(x){ invN+=x.n; invD+=x.d; });
+  invN+=d.prov_n+d.contab; invD+=d.prov_d+d.contab;
   var espN=d.en+d.prov_n+d.contab, espD=d.ed+d.prov_d+d.contab;
-  var ok=Math.abs(somaN-espN)<0.005 && Math.abs(somaD-espD)<0.005;
-  var inv = ok
-    ? '<div style="font-size:11px;color:var(--green);margin-top:10px">✓ Confere: soma Néia '+brl(somaN)+' · Dany '+brl(somaD)+' = "Despesas e provisões" do resumo.</div>'
-    : '<div style="font-size:11px;color:var(--red);font-weight:500;margin-top:10px">⚠️ Divergência bloco × resumo — Néia '+brl(somaN)+' vs '+brl(espN)+' · Dany '+brl(somaD)+' vs '+brl(espD)+'</div>';
-  return '<div class="card"><div class="card-title">Compromissos e provisões do mês</div>'+rows+inv+'</div>';
+  var ok=Math.abs(invN-espN)<0.005 && Math.abs(invD-espD)<0.005;
+  var r={ok:ok, neia:{comp:invN, azul:espN}, dany:{comp:invD, azul:espD}};
+  if(typeof console!=='undefined') console[ok?'log':'error']('[__testInvariante] '+(ok?'PASS':'FAIL'), r);
+  return r;
 }
 function renderDash(){
   var d=calcDisp();
@@ -896,7 +984,7 @@ function renderDash(){
     +'<span style="font-size:11px;color:var(--gray)"><span style="display:inline-block;width:10px;height:10px;background:var(--amber);border-radius:2px;margin-right:4px"></span>Resultado</span>'
     +'<span style="font-size:11px;color:var(--gray)"><span style="display:inline-block;width:10px;height:10px;background:#E0DDD6;border-radius:2px;margin-right:4px"></span>Futuro</span>'
     +'</div></div>'
-    +'<p class="stt">Últimos Lançamentos</p>'
+    +'<p class="stt" id="ult-lanc">Últimos Lançamentos</p>'
     +txHtml
     +'<div style="text-align:center;margin-top:20px"><button class="btn btn-sec btn-sm" id="btn-sair">Sair</button></div>';
 }
@@ -965,6 +1053,12 @@ async function salvarCaixa(){
   }
 }
 
+// Rola a .content até "Últimos Lançamentos" (rodapé "N pagos este mês — ver lançamentos"). A .content é
+// quem rola (overflow-y:auto), NÃO a window — por isso ajustamos scrollTop dela, não window.scrollTo.
+function scrollToLanc(){
+  var el=document.getElementById('ult-lanc'), sc=document.querySelector('.content');
+  if(el&&sc) sc.scrollTop = el.getBoundingClientRect().top - sc.getBoundingClientRect().top + sc.scrollTop - 8;
+}
 // Baixa de compromisso provisionado (status -> 'pago'). SÓ admin. A segurança REAL está no banco
 // (função nd_baixa checa papel); o botão escondido é só conveniência. Não altera valores nem agregados.
 async function darBaixa(id){
